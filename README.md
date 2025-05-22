@@ -3,7 +3,7 @@
 
 ## 実行環境
  - python 3.13.1
- - 使用したライブラリ requirements.txt に記述
+ - 使用したライブラリは requirements.txt に記述
 
 ## 実行手順
 実行環境が整ったらPower shellでリポジトリに移動してから実行
