@@ -1,4 +1,0 @@
-2025-05-22 11:31:07,397 __main__ [INFO] app.py:187 app2ランチャーを開始します
-2025-05-22 11:31:08,588 __main__ [DEBUG] app.py:127 パス検証: 入力=sample_data, 出力=, 有効=False
-2025-05-22 11:31:08,589 __main__ [DEBUG] app.py:127 パス検証: 入力=sample_data, 出力=output, 有効=True
-2025-05-22 11:31:08,591 __main__ [DEBUG] app.py:127 パス検証: 入力=sample_data, 出力=output, 有効=True
