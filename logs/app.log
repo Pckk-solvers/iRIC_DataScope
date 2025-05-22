@@ -1,0 +1,29 @@
+2025-05-22 11:08:13,198 __main__ [INFO] app2.py:187 app2ランチャーを開始します
+2025-05-22 11:08:14,490 __main__ [DEBUG] app2.py:127 パス検証: 入力=sample_data, 出力=, 有効=False
+2025-05-22 11:08:14,492 __main__ [DEBUG] app2.py:127 パス検証: 入力=sample_data, 出力=output, 有効=True
+2025-05-22 11:08:14,494 __main__ [DEBUG] app2.py:127 パス検証: 入力=sample_data, 出力=output, 有効=True
+2025-05-22 11:10:50,124 __main__ [INFO] app.py:187 app2ランチャーを開始します
+2025-05-22 11:10:51,311 __main__ [DEBUG] app.py:127 パス検証: 入力=sample_data, 出力=, 有効=False
+2025-05-22 11:10:51,313 __main__ [DEBUG] app.py:127 パス検証: 入力=sample_data, 出力=output, 有効=True
+2025-05-22 11:10:51,319 __main__ [DEBUG] app.py:127 パス検証: 入力=sample_data, 出力=output, 有効=True
+2025-05-22 11:16:46,261 __main__ [INFO] app.py:187 app2ランチャーを開始します
+2025-05-22 11:16:46,433 __main__ [DEBUG] app.py:127 パス検証: 入力=sample_data, 出力=, 有効=False
+2025-05-22 11:16:46,436 __main__ [DEBUG] app.py:127 パス検証: 入力=sample_data, 出力=output, 有効=True
+2025-05-22 11:16:46,439 __main__ [DEBUG] app.py:127 パス検証: 入力=sample_data, 出力=output, 有効=True
+2025-05-22 11:17:46,013 iRIC_DataScope.time_series.gui_components [INFO] gui_components.py:107 格子点追加: (1,2)
+2025-05-22 11:17:50,218 iRIC_DataScope.time_series.gui_components [INFO] gui_components.py:175 抽出変数: ['X', 'Y']
+2025-05-22 11:17:50,218 iRIC_DataScope.time_series.processor [INFO] processor.py:68 CSV 集計開始: sample_data
+2025-05-22 11:17:50,219 iRIC_DataScope.time_series.processor [INFO] processor.py:70 処理対象 CSV ファイル数: 4
+2025-05-22 11:17:50,310 iRIC_DataScope.time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\iRIC_DataScope\sample_data\Result_1.csv (time=0.0)
+2025-05-22 11:17:50,310 iRIC_DataScope.time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\iRIC_DataScope\sample_data\Result_1.csv から 1 レコードを抽出しました
+2025-05-22 11:17:50,389 iRIC_DataScope.time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\iRIC_DataScope\sample_data\Result_2.csv (time=3600.0)
+2025-05-22 11:17:50,390 iRIC_DataScope.time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\iRIC_DataScope\sample_data\Result_2.csv から 1 レコードを抽出しました
+2025-05-22 11:17:50,464 iRIC_DataScope.time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\iRIC_DataScope\sample_data\Result_3.csv (time=7200.0)
+2025-05-22 11:17:50,465 iRIC_DataScope.time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\iRIC_DataScope\sample_data\Result_3.csv から 1 レコードを抽出しました
+2025-05-22 11:17:50,536 iRIC_DataScope.time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\iRIC_DataScope\sample_data\Result_4.csv (time=10800.0)
+2025-05-22 11:17:50,537 iRIC_DataScope.time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\iRIC_DataScope\sample_data\Result_4.csv から 1 レコードを抽出しました
+2025-05-22 11:17:50,539 iRIC_DataScope.time_series.processor [DEBUG] processor.py:87 格子点 (1, 2): 4 レコード
+2025-05-22 11:17:50,539 iRIC_DataScope.time_series.processor [INFO] processor.py:92 CSV 集計完了
+2025-05-22 11:17:50,539 iRIC_DataScope.time_series.excel_writer [INFO] excel_writer.py:25 Excel ファイル出力開始: output\time_series.xlsx
+2025-05-22 11:17:50,541 iRIC_DataScope.time_series.excel_writer [DEBUG] excel_writer.py:30 シート出力: (I,J)=(1,2) (4 行)
+2025-05-22 11:17:50,604 iRIC_DataScope.time_series.excel_writer [INFO] excel_writer.py:44 Excel ファイル出力完了

@@ -1,0 +1,135 @@
+2025-05-07 11:31:49,642 __main__ [INFO] app.py:40 メニュー選択: 時系列抽出機能
+2025-05-07 11:31:49,642 __main__ [INFO] app.py:40 メニュー選択: 時系列抽出機能
+2025-05-07 11:50:59,916 __main__ [INFO] app.py:38 メニュー選択: 時系列抽出機能
+2025-05-07 11:50:59,916 __main__ [INFO] app.py:38 メニュー選択: 時系列抽出機能
+2025-05-07 13:14:36,321 __main__ [INFO] app.py:40 メニュー選択: 時系列抽出機能
+2025-05-07 13:14:36,321 __main__ [INFO] app.py:40 メニュー選択: 時系列抽出機能
+2025-05-07 13:14:51,032 common.path_selector [INFO] path_selector.py:71 directory 選択: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/sample_data
+2025-05-07 13:14:51,032 common.path_selector [INFO] path_selector.py:71 directory 選択: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/sample_data
+2025-05-07 13:15:04,049 common.path_selector [INFO] path_selector.py:71 file_save 選択: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/output/234.xlsx
+2025-05-07 13:15:04,049 common.path_selector [INFO] path_selector.py:71 file_save 選択: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/output/234.xlsx
+2025-05-07 13:15:12,784 time_series.gui_components [INFO] gui_components.py:70 格子点追加: (23,3)
+2025-05-07 13:15:12,784 time_series.gui_components [INFO] gui_components.py:70 格子点追加: (23,3)
+2025-05-07 13:15:21,072 time_series.gui_components [INFO] gui_components.py:126 抽出変数: ['elevation(m)', 'watersurfaceelevation(m)', 'shearstress(nm-2)']
+2025-05-07 13:15:21,072 time_series.gui_components [INFO] gui_components.py:126 抽出変数: ['elevation(m)', 'watersurfaceelevation(m)', 'shearstress(nm-2)']
+2025-05-07 13:15:21,073 time_series.main [INFO] main.py:69 処理開始: in_dir=C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/sample_data, out_file=C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/output/234.xlsx, points=[(23, 3)], vars=['elevation(m)', 'watersurfaceelevation(m)', 'shearstress(nm-2)']
+2025-05-07 13:15:21,073 time_series.main [INFO] main.py:69 処理開始: in_dir=C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/sample_data, out_file=C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/output/234.xlsx, points=[(23, 3)], vars=['elevation(m)', 'watersurfaceelevation(m)', 'shearstress(nm-2)']
+2025-05-07 13:15:21,074 time_series.processor [INFO] processor.py:68 CSV 集計開始: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/sample_data
+2025-05-07 13:15:21,074 time_series.processor [INFO] processor.py:68 CSV 集計開始: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/sample_data
+2025-05-07 13:15:21,075 time_series.processor [INFO] processor.py:70 処理対象 CSV ファイル数: 4
+2025-05-07 13:15:21,075 time_series.processor [INFO] processor.py:70 処理対象 CSV ファイル数: 4
+2025-05-07 13:15:21,161 time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_1.csv (time=0.0)
+2025-05-07 13:15:21,161 time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_1.csv (time=0.0)
+2025-05-07 13:15:21,175 time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_1.csv から 1 レコードを抽出しました
+2025-05-07 13:15:21,175 time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_1.csv から 1 レコードを抽出しました
+2025-05-07 13:15:21,276 time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_2.csv (time=3600.0)
+2025-05-07 13:15:21,276 time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_2.csv (time=3600.0)
+2025-05-07 13:15:21,277 time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_2.csv から 1 レコードを抽出しました
+2025-05-07 13:15:21,277 time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_2.csv から 1 レコードを抽出しました
+2025-05-07 13:15:21,360 time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_3.csv (time=7200.0)
+2025-05-07 13:15:21,360 time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_3.csv (time=7200.0)
+2025-05-07 13:15:21,361 time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_3.csv から 1 レコードを抽出しました
+2025-05-07 13:15:21,361 time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_3.csv から 1 レコードを抽出しました
+2025-05-07 13:15:21,443 time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_4.csv (time=10800.0)
+2025-05-07 13:15:21,443 time_series.processor [DEBUG] processor.py:28 読み込んだ CSV: C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_4.csv (time=10800.0)
+2025-05-07 13:15:21,444 time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_4.csv から 1 レコードを抽出しました
+2025-05-07 13:15:21,444 time_series.processor [INFO] processor.py:48 C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\sample_data\Result_4.csv から 1 レコードを抽出しました
+2025-05-07 13:15:21,448 time_series.processor [DEBUG] processor.py:87 格子点 (23, 3): 4 レコード
+2025-05-07 13:15:21,448 time_series.processor [DEBUG] processor.py:87 格子点 (23, 3): 4 レコード
+2025-05-07 13:15:21,448 time_series.processor [INFO] processor.py:92 CSV 集計完了
+2025-05-07 13:15:21,448 time_series.processor [INFO] processor.py:92 CSV 集計完了
+2025-05-07 13:15:21,448 time_series.excel_writer [INFO] excel_writer.py:24 Excel ファイル出力開始: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/output/234.xlsx
+2025-05-07 13:15:21,448 time_series.excel_writer [INFO] excel_writer.py:24 Excel ファイル出力開始: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/output/234.xlsx
+2025-05-07 13:15:21,547 time_series.excel_writer [DEBUG] excel_writer.py:29 シート出力: (I,J)=(23,3) (4 行)
+2025-05-07 13:15:21,547 time_series.excel_writer [DEBUG] excel_writer.py:29 シート出力: (I,J)=(23,3) (4 行)
+2025-05-07 13:15:21,649 time_series.excel_writer [INFO] excel_writer.py:43 Excel ファイル出力完了
+2025-05-07 13:15:21,649 time_series.excel_writer [INFO] excel_writer.py:43 Excel ファイル出力完了
+2025-05-07 13:15:21,649 time_series.main [INFO] main.py:72 処理完了
+2025-05-07 13:15:21,649 time_series.main [INFO] main.py:72 処理完了
+2025-05-07 13:23:07,347 __main__ [ERROR] app.py:52 左右岸最大水位整理ツールのGUI読み込みに失敗しました
+Traceback (most recent call last):
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\app.py", line 21, in <module>
+    from P_5.gui import App as MaxElevationApp
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\P_5\gui.py", line 9, in <module>
+    from config import load_setting
+ModuleNotFoundError: No module named 'config'
+2025-05-07 13:23:07,347 __main__ [ERROR] app.py:52 左右岸最大水位整理ツールのGUI読み込みに失敗しました
+Traceback (most recent call last):
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\app.py", line 21, in <module>
+    from P_5.gui import App as MaxElevationApp
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\P_5\gui.py", line 9, in <module>
+    from config import load_setting
+ModuleNotFoundError: No module named 'config'
+2025-05-07 13:27:08,005 __main__ [ERROR] app.py:52 左右岸最大水位整理ツールのGUI読み込みに失敗しました
+Traceback (most recent call last):
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\app.py", line 21, in <module>
+    from P_5.gui import App as MaxElevationApp
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\P_5\gui.py", line 10, in <module>
+    from .extractor import extract_all
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\P_5\extractor.py", line 7, in <module>
+    from reader import read_iric_csv  # assume reader provides t and df
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'reader'
+2025-05-07 13:27:08,005 __main__ [ERROR] app.py:52 左右岸最大水位整理ツールのGUI読み込みに失敗しました
+Traceback (most recent call last):
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\app.py", line 21, in <module>
+    from P_5.gui import App as MaxElevationApp
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\P_5\gui.py", line 10, in <module>
+    from .extractor import extract_all
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\P_5\extractor.py", line 7, in <module>
+    from reader import read_iric_csv  # assume reader provides t and df
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'reader'
+2025-05-07 13:27:56,193 __main__ [INFO] app.py:48 メニュー選択: 左右岸最大水位整理ツール
+2025-05-07 13:27:56,193 __main__ [INFO] app.py:48 メニュー選択: 左右岸最大水位整理ツール
+2025-05-07 13:33:24,616 __main__ [INFO] app.py:44 メニュー選択: 時系列抽出機能
+2025-05-07 13:52:19,736 __main__ [INFO] app.py:51 起動モード: GUIランチャー
+2025-05-07 16:09:19,060 __main__ [INFO] app.py:51 起動モード: GUIランチャー
+2025-05-09 15:03:06,292 __main__ [INFO] app.py:61 起動モード: CLIメニュー
+2025-05-09 15:03:23,512 __main__ [INFO] app.py:58 起動モード: GUIランチャー
+2025-05-09 15:04:24,942 common.path_selector [INFO] path_selector.py:71 directory 選択: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/sample_data
+2025-05-09 15:04:38,266 common.path_selector [INFO] path_selector.py:71 directory 選択: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/sample_data
+2025-05-09 15:05:00,647 common.path_selector [INFO] path_selector.py:71 file_save 選択: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/output/1111.xlsx
+2025-05-09 15:05:13,489 time_series.gui_components [INFO] gui_components.py:70 格子点追加: (1,3)
+2025-05-09 15:05:40,203 time_series.main [ERROR] main.py:75 処理中にエラー発生: 変数未選択
+Traceback (most recent call last):
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\time_series\main.py", line 67, in on_run
+    vars = var_sel.get_variables()
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\time_series\gui_components.py", line 125, in get_variables
+    raise ValueError("変数未選択")
+ValueError: 変数未選択
+2025-05-09 15:05:52,367 time_series.main [ERROR] main.py:75 処理中にエラー発生: 変数未選択
+Traceback (most recent call last):
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\time_series\main.py", line 67, in on_run
+    vars = var_sel.get_variables()
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\time_series\gui_components.py", line 125, in get_variables
+    raise ValueError("変数未選択")
+ValueError: 変数未選択
+2025-05-09 15:09:35,500 __main__ [INFO] app.py:58 起動モード: GUIランチャー
+2025-05-09 15:10:03,657 iric_tools.common.path_selector [INFO] path_selector.py:71 directory 選択: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/sample_data
+2025-05-09 15:20:21,980 __main__ [INFO] app.py:61 起動モード: GUIランチャー
+2025-05-09 15:20:34,642 iric_tools.common.path_selector [INFO] path_selector.py:71 directory 選択: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/sample_data
+2025-05-09 15:21:10,128 iric_tools.common.path_selector [INFO] path_selector.py:71 file_save 選択: C:/Users/yuuta.ochiai/Documents/GitHub/Ochiai-documents/project_28/output/adfgagrfr.xlsx
+2025-05-09 15:21:19,605 iric_tools.time_series.gui_components [INFO] gui_components.py:70 格子点追加: (1,3)
+2025-05-09 15:21:26,162 iric_tools.time_series.main [ERROR] main.py:75 処理中にエラー発生: 変数未選択
+Traceback (most recent call last):
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\time_series\main.py", line 67, in on_run
+    vars = var_sel.get_variables()
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\time_series\gui_components.py", line 125, in get_variables
+    raise ValueError("変数未選択")
+ValueError: 変数未選択
+2025-05-09 15:21:31,468 iric_tools.time_series.main [ERROR] main.py:75 処理中にエラー発生: 変数未選択
+Traceback (most recent call last):
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\time_series\main.py", line 67, in on_run
+    vars = var_sel.get_variables()
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\time_series\gui_components.py", line 125, in get_variables
+    raise ValueError("変数未選択")
+ValueError: 変数未選択
+2025-05-09 15:22:04,017 iric_tools.time_series.main [ERROR] main.py:75 処理中にエラー発生: 変数未選択
+Traceback (most recent call last):
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\time_series\main.py", line 67, in on_run
+    vars = var_sel.get_variables()
+  File "C:\Users\yuuta.ochiai\Documents\GitHub\Ochiai-documents\project_28\iric_tools\time_series\gui_components.py", line 125, in get_variables
+    raise ValueError("変数未選択")
+ValueError: 変数未選択
+2025-05-09 15:25:47,159 __main__ [INFO] app.py:61 起動モード: GUIランチャー

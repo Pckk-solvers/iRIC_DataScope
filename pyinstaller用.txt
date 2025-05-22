@@ -1,0 +1,16 @@
+exe化するときにpyinstallerを使用するためそれを使う場合はライブラリのインストールを行い、
+ターミナル（Power shell）にコマンドを打つことで実行ファイルにすることができる。
+テンプレート　nameの部分を変えて使う
+
+pyinstaller `
+  --onefile `
+  --windowed `
+  --name iRIC_DataScope-0.1.0-alpha.1  `
+  --add-data "iric_tools;iric_tools" `
+  --hidden-import=tkinter.ttk `
+  --hidden-import=tkinter.messagebox `
+  --hidden-import=tkinter.filedialog `
+  --hidden-import=logging.handlers `
+  --hidden-import=xlsxwriter `
+  --collect-all pandas `
+  iric_tools\app2.py
