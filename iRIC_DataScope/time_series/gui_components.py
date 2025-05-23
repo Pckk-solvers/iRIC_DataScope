@@ -69,7 +69,13 @@ class GridSelector(ttk.Frame):
         self.tree = ttk.Treeview(self, columns=("I", "J"), show="headings", height=6)
         self.tree.heading("I", text="I index")
         self.tree.heading("J", text="J index")
+        # 縦スクロールバー
+        vsb = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=vsb.set)
+
+        # Grid に配置
         self.tree.grid(row=0, column=0, columnspan=8, sticky='nsew')
+        vsb.grid  (row=0, column=8, sticky='ns', padx=(0, PAD_X))
 
         # --- 一行目の入力フィールド＆ボタン配置 ---
         pad = {'padx': 8, 'pady': 4}
@@ -78,7 +84,8 @@ class GridSelector(ttk.Frame):
         btn_frame.grid(row=1, column=0, columnspan=2, sticky="w", **pad)
         ttk.Button(btn_frame, text="インポート", command=self.import_points).pack(side="left")
         ttk.Button(btn_frame, text="クリア", command=self.clear_points).pack(side="left", padx=4)
-        # 個別 I,J 入力と追加・削除
+
+        # 個別 I,J 入力と追加・ソート・削除
         ttk.Label(self, text="I :", font=10).grid(row=1, column=2, sticky="e", **pad)
         self.i_entry = ttk.Entry(self, width=5, font=FONT_MAIN)
         self.i_entry.grid(row=1, column=3, sticky="w", **pad)
@@ -86,20 +93,22 @@ class GridSelector(ttk.Frame):
         self.j_entry = ttk.Entry(self, width=5, font=FONT_MAIN)
         self.j_entry.grid(row=1, column=5, sticky="w", **pad)
         ttk.Button(self, text="追加", command=self.add_point).grid(row=1, column=6, sticky="w", pady=4)
-        ttk.Button(self, text="削除", command=self.remove_point).grid(row=1, column=7, sticky="w", pady=4)
+        ttk.Button(self, text="ソート", command=self.sort_points).grid(row=1, column=7, sticky="w", pady=4)
+        ttk.Button(self, text="削除", command=self.remove_point).grid(row=1, column=8, sticky="w", pady=4)
+
 
         # --- この行だけ幅をそろえる設定 ---
-        for col in range(8):
+        for col in range(9):
             self.grid_columnconfigure(
                 col,
                 uniform="row1_equal",
                 weight=0
             )
         # -------------------------------------------------
-
-        # レイアウト設定
-        self.grid_columnconfigure(0, weight=1)
-        self.grid_rowconfigure(0, weight=1)
+        # グリッド伸縮設定
+        self.grid_columnconfigure(0, weight=1)  # Treeview 列
+        # vsb は固定なので weight=0 のまま
+        self.grid_rowconfigure(0, weight=1)     # Treeview 行
 
     def add_point(self):
         """I,J を整数として追加し、フォームをクリア"""
@@ -145,6 +154,19 @@ class GridSelector(ttk.Frame):
         for item in self.tree.get_children():
             self.tree.delete(item)
         logger.info("格子点全削除完了")
+        
+    def sort_points(self):
+        """I,J のペアで昇順ソートして Treeview を並び替え"""
+        # (I, J, item_id) のタプルリストを作成
+        data = [
+            (int(self.tree.set(item, 'I')), int(self.tree.set(item, 'J')), item)
+            for item in self.tree.get_children('')
+        ]
+        # I→J の昇順でソート
+        data.sort()
+        # ソート順に move で並べ替え
+        for idx, (_, _, item) in enumerate(data):
+            self.tree.move(item, '', idx)
 
     def get_points(self) -> list[tuple[int, int]]:
         """現在の格子点リストを返却"""
@@ -278,11 +300,13 @@ class TimeSeriesGUI(tk.Toplevel):
 
         # 格子点セレクタ
         self.grid_sel = GridSelector(self)
-        self.grid_sel.pack(fill="x", padx=PAD_X, pady=PAD_Y)
+        # both=縦横、expand=True=余白も埋める
+        self.grid_sel.pack(fill="both", expand=True, padx=PAD_X, pady=PAD_Y)
 
         # 変数選択セレクタ
         self.var_sel = VariableSelector(self, initial_dir=self.input_dir)
         self.var_sel.pack(fill="x", padx=PAD_X, pady=PAD_Y)
+
 
         # 実行ボタン
         tk.Button(self, text="実行", font=FONT_MAIN, command=self._on_run).pack(pady=PAD_Y, anchor="center")
