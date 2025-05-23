@@ -1,4 +1,4 @@
-# extractor.py
+# iRIC_DataScope\lr_wse\extractor.py
 import pandas as pd
 import numpy as np
 from pathlib import Path
@@ -75,7 +75,7 @@ def extract_all(
     temp_dir.mkdir(parents=True, exist_ok=True)
 
     # ファイル探索
-    csv_paths = list(input_dir.rglob("Result_*.csv"))
+    csv_paths = list(input_dir.rglob("*.csv"))
     for csv_path in csv_paths:
         t, df = read_iric_csv(csv_path)
         left_df = extract_bank_data(df, setting_df, 'L', t)

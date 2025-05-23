@@ -1,7 +1,9 @@
+# iRIC_DataScope\time_series\processor.py
+
 import logging
 from typing import List, Tuple, Dict
 import pandas as pd
-from common.csv_reader import list_csv_files, read_iric_csv
+from iRIC_DataScope.common.csv_reader import list_csv_files, read_iric_csv
 
 # ロガー取得
 logger = logging.getLogger(__name__)

@@ -1,4 +1,4 @@
-# P_5/config.py
+# iRIC_DataScope\lr_wse\config.py
 
 import pandas as pd
 from pathlib import Path

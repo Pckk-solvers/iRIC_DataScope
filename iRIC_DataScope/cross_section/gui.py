@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# iRIC_DataScope\cross_section\gui.py
 """
 プロファイルプロット GUI （Toplevel版）
 

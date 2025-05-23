@@ -1,4 +1,4 @@
-# reader.py
+# iRIC_DataScope\lr_wse\reader.py
 from pathlib import Path
 import pandas as pd
 from typing import Tuple, Optional

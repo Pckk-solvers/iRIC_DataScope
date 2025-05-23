@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# iRIC_DataScope\lr_wse\gui.py
 """
 P_5 GUI: iRIC 左右岸最大水位整理ツール
 このウィンドウは Toplevel で生成され、ランチャーの Tk を master に持ちます。

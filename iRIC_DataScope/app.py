@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# iRIC_DataScope\app.py
 """
-app.py: iRIC 統合ランチャー
+iRIC_DataScope\app.py 直接実行用スクリプト
 """
 import sys
 import logging

@@ -1,4 +1,4 @@
-# writer.py
+# iRIC_DataScope\lr_wse\writer.py
 
 import pandas as pd
 from pathlib import Path

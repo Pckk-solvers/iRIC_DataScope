@@ -1,4 +1,4 @@
-# iric_tools/plot_profile/excel_utils.py
+# iRIC_DataScope\cross_section\excel_utils.py
 
 from pathlib import Path
 from typing import Dict

@@ -1,4 +1,4 @@
-# iric_tools/plot_profile/plot_main.py
+# iRIC_DataScope\cross_section\plot_main.py
 
 from pathlib import Path
 from typing import Optional, List

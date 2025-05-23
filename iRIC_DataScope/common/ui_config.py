@@ -1,3 +1,4 @@
+# iRIC_DataScope\common\ui_config.py
 """
 GUI 共通設定モジュール
 

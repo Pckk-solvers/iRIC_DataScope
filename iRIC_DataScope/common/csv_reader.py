@@ -23,12 +23,12 @@ def list_csv_files(csv_dir: str) -> list[str]:
         raise NotADirectoryError(f"指定パスがディレクトリではありません: {csv_dir}")
 
     # 2. 再帰的に Result_*.csv を検索
-    pattern = os.path.join(csv_dir, '**', 'Result_*.csv')
+    pattern = os.path.join(csv_dir, '**', '*.csv')
     files = glob.glob(pattern, recursive=True)
 
     # 3. 見つからなければ明示的に例外
     if not files:
-        raise FileNotFoundError(f"{csv_dir} 以下に Result_*.csv が見つかりません")
+        raise FileNotFoundError(f"{csv_dir} 以下に CSVファイル が見つかりません")
 
     return sorted(files)
 

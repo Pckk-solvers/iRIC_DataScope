@@ -1,3 +1,4 @@
+# iRIC_DataScope\common\path_selector.py
 """
 汎用パス選択UIコンポーネント
 
@@ -10,7 +11,7 @@ import os
 import logging
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from common.ui_config import FONT_MAIN, PAD_X, PAD_Y
+from .ui_config import FONT_MAIN, PAD_X, PAD_Y
 
 logger = logging.getLogger(__name__)
 

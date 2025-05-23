@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# iRIC_DataScope\time_series\main.py
 """
 時系列抽出ツールのエントリポイント
 - GUIの構築と配置は gui_components に委譲
@@ -13,7 +14,7 @@ if __name__ == "__main__" and __package__ is None:
     sys.path.insert(0, project_root)
     __package__ = "iric_tools.time_series"
 
-from common.logging_config import setup_logging
+from iRIC_DataScope.common.logging_config import setup_logging
 from .gui_components import launch_time_series_gui
 
 logger = logging.getLogger(__name__)

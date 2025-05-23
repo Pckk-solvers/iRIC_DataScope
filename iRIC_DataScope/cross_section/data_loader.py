@@ -1,10 +1,10 @@
-# iric_tools/plot_profile/data_loader.py
+# iRIC_DataScope\cross_section\data_loader.py
 
 from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import pandas as pd
 import numpy as np
-from common.csv_reader import list_csv_files, read_iric_csv
+from iRIC_DataScope.common.csv_reader import list_csv_files, read_iric_csv
 
 def _read_and_prepare(file_path: Path) -> Tuple[float, pd.DataFrame]:
     """

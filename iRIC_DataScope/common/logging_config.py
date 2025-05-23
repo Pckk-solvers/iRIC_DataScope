@@ -1,3 +1,4 @@
+# iRIC_DataScope\common\logging_config.py
 # ログ設定をまとめるファイル
 import logging
 import os

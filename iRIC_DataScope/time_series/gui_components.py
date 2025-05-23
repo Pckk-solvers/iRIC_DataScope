@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# iRIC_DataScope\time_series\gui_components.py
 """
 iric_tools/time_series/gui_components.py:
 時系列抽出ツール GUI リファクタリング版
@@ -13,11 +14,12 @@ import os
 import logging
 import tkinter as tk
 import webbrowser
-from tkinter import messagebox, ttk
+from tkinter import messagebox, ttk, filedialog
 from pathlib import Path
+import pandas as pd
 
-from common.path_selector import PathSelector
-from common.ui_config import FONT_MAIN, PAD_X, PAD_Y
+from iRIC_DataScope.common.path_selector import PathSelector
+from iRIC_DataScope.common.ui_config import FONT_MAIN, PAD_X, PAD_Y
 from .processor import aggregate_all
 from .excel_writer import write_sheets
 
@@ -59,7 +61,7 @@ class OutputDirectorySelector(PathSelector):
 
 class GridSelector(ttk.Frame):
     """
-    格子点 (I,J) を追加・削除できるテーブルUI
+    格子点 (I,J) を追加・削除できるテーブルUI。設定CSV一括読み込み、全消去機能付き。
     """
     def __init__(self, master):
         super().__init__(master, padding=(PAD_X, PAD_Y))
@@ -67,28 +69,34 @@ class GridSelector(ttk.Frame):
         self.tree = ttk.Treeview(self, columns=("I", "J"), show="headings", height=6)
         self.tree.heading("I", text="I index")
         self.tree.heading("J", text="J index")
-        self.tree.grid(row=0, column=0, columnspan=6, sticky='nsew')
+        self.tree.grid(row=0, column=0, columnspan=8, sticky='nsew')
 
         # --- 一行目の入力フィールド＆ボタン配置 ---
         pad = {'padx': 8, 'pady': 4}
-        ttk.Label(self, text="I :", font=10).grid(row=1, column=0, sticky="e", **pad)
+        # 設定CSV一括読み込み・全クリアをまとめて配置
+        btn_frame = ttk.Frame(self)
+        btn_frame.grid(row=1, column=0, columnspan=2, sticky="w", **pad)
+        ttk.Button(btn_frame, text="インポート", command=self.import_points).pack(side="left")
+        ttk.Button(btn_frame, text="クリア", command=self.clear_points).pack(side="left", padx=4)
+        # 個別 I,J 入力と追加・削除
+        ttk.Label(self, text="I :", font=10).grid(row=1, column=2, sticky="e", **pad)
         self.i_entry = ttk.Entry(self, width=5, font=FONT_MAIN)
-        self.i_entry.grid(row=1, column=1, sticky="w", **pad)
-        ttk.Label(self, text="J :", font=10).grid(row=1, column=2, sticky="e", **pad)
+        self.i_entry.grid(row=1, column=3, sticky="w", **pad)
+        ttk.Label(self, text="J :", font=10).grid(row=1, column=4, sticky="e", **pad)
         self.j_entry = ttk.Entry(self, width=5, font=FONT_MAIN)
-        self.j_entry.grid(row=1, column=3, sticky="w", **pad)
-        ttk.Button(self, text="追加", command=self.add_point).grid(row=1, column=4, sticky="w", pady=4)
-        ttk.Button(self, text="削除", command=self.remove_point).grid(row=1, column=5, sticky="w", pady=4) 
-        
+        self.j_entry.grid(row=1, column=5, sticky="w", **pad)
+        ttk.Button(self, text="追加", command=self.add_point).grid(row=1, column=6, sticky="w", pady=4)
+        ttk.Button(self, text="削除", command=self.remove_point).grid(row=1, column=7, sticky="w", pady=4)
+
         # --- この行だけ幅をそろえる設定 ---
-        for col in range(6):       # 0〜5 列を同じグループに設定
+        for col in range(8):
             self.grid_columnconfigure(
                 col,
-                uniform="row1_equal",  # 同じ名前の uniform で幅を揃える
-                weight=0               # weight=0 → ウィンドウサイズ変更で伸びない
+                uniform="row1_equal",
+                weight=0
             )
         # -------------------------------------------------
-        
+
         # レイアウト設定
         self.grid_columnconfigure(0, weight=1)
         self.grid_rowconfigure(0, weight=1)
@@ -113,9 +121,35 @@ class GridSelector(ttk.Frame):
             self.tree.delete(item)
             logger.info(f"格子点削除: {vals}")
 
+    def import_points(self):
+        """設定CSVから I,J 列を読み込み、一括追加"""
+        file_path = filedialog.askopenfilename(
+            title="設定CSVを選択",
+            filetypes=[("CSV files", "*.csv"), ("All files", "*")]
+        )
+        if not file_path:
+            return
+        try:
+            df = pd.read_csv(file_path, usecols=["I", "J"] )
+            for _, row in df.iterrows():
+                i_val = int(row["I"])
+                j_val = int(row["J"])
+                self.tree.insert("", "end", values=(i_val, j_val))
+                logger.info(f"CSV から格子点追加: ({i_val},{j_val})")
+        except Exception as e:
+            messagebox.showerror("読み込みエラー", f"CSV 読み込みに失敗しました:\n{e}")
+            logger.error(f"CSV 読み込みエラー: {e}", exc_info=True)
+
+    def clear_points(self):
+        """テーブル内すべての格子点をクリア"""
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        logger.info("格子点全削除完了")
+
     def get_points(self) -> list[tuple[int, int]]:
         """現在の格子点リストを返却"""
         return [tuple(map(int, self.tree.item(r, "values"))) for r in self.tree.get_children()]
+
 
 
 class VariableSelector(ttk.Frame):
@@ -146,7 +180,7 @@ class VariableSelector(ttk.Frame):
         # サンプル CSV からカラム一覧を取得
         if self.sample_dir and os.path.isdir(self.sample_dir):
             try:
-                from common.csv_reader import list_csv_files, read_iric_csv
+                from iRIC_DataScope.common.csv_reader import list_csv_files, read_iric_csv
                 files = list_csv_files(self.sample_dir)
                 if files:
                     _, df = read_iric_csv(files[0])

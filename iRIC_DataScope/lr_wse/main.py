@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+# iRIC_DataScope\lr_wse\main.py
 """
 P_5: iRIC 左右岸最大水位整理ツール
 
