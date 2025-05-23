@@ -8,5 +8,7 @@
 ## 実行手順
 実行環境が整ったらPower shellでリポジトリに移動してから実行
 
-以下のコマンドで実行することができる
+以下のコマンドで実行することができる(モジュール実行と直接実行)
+
+python -m iRIC_DataScope.app
 python iRIC_DataScope\app.py 
