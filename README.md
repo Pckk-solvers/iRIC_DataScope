@@ -11,4 +11,5 @@
 以下のコマンドで実行することができる(モジュール実行と直接実行)
 
 python -m iRIC_DataScope.app
+<br>
 python iRIC_DataScope\app.py 
