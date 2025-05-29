@@ -6,10 +6,14 @@ P_5 GUI: iRIC 左右岸最大水位整理ツール
 このウィンドウは Toplevel で生成され、ランチャーの Tk を master に持ちます。
 """
 import sys
+import logging
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import webbrowser
+
+# ロガー設定
+logger = logging.getLogger(__name__)
 
 # スクリプト単体実行時にパッケージを認識させる
 if __name__ == "__main__" and __package__ is None:
@@ -28,6 +32,7 @@ class P5GUI(tk.Toplevel):
     - 実行/ヘルプメニュー
     """
     def __init__(self, master, input_dir: Path, output_dir: Path):
+        logger.info(f"GUI インスタンス作成: input_dir={input_dir}, output_dir={output_dir}")
         super().__init__(master)
         self.master = master
         self.input_dir = input_dir
@@ -47,6 +52,7 @@ class P5GUI(tk.Toplevel):
 
     def _configure_window(self):
         """ウィンドウタイトルとサイズを設定"""
+        logger.info("ウィンドウ設定開始")
         self.title("左右岸水位抽出")
         #self.geometry("600x330")
         
@@ -55,11 +61,13 @@ class P5GUI(tk.Toplevel):
         ウィジェット配置後に必要最小サイズを計算し、
         初期ジオメトリと最小サイズとして設定する
         """
+        logger.info("ウィンドウサイズ調整開始")
         # 全配置が終わるまで待ってサイズ計算
         self.update_idletasks()
         # 必要最小幅・高さを取得
         w = self.winfo_reqwidth()
         h = self.winfo_reqheight()
+        logger.debug(f"ウィンドウサイズ: width={w}, height={h}")
 
         # 余白として左右 0px、上下 0px を追加
         margin_x, margin_y = 0, 0  
@@ -145,25 +153,34 @@ class P5GUI(tk.Toplevel):
 
     def _choose_config_file(self):
         """設定ファイルを選択し、変数にセット"""
+        logger.info("設定ファイル選択ダイアログを開く")
         file = filedialog.askopenfilename(
             title="設定ファイルを選択",
             filetypes=[("CSVファイル", "*.csv"), ("All files", "*")]
         )
         if file:
             self.config_file = Path(file)
+            logger.info(f"設定ファイル選択: {file}")
             self.config_var.set(str(file))
 
     def _run(self):
         """P5 実行処理を呼び出し、完了/エラーを通知"""
+        logger.info("実行ボタン押下")
         try:
             in_dir = Path(self.input_var.get())
             out_dir = Path(self.output_var.get())
             cfg = self.config_file
+            logger.debug(f"入力フォルダ: {in_dir}, 出力フォルダ: {out_dir}, 設定ファイル: {cfg}")
+            
             if not (in_dir.is_dir() and out_dir.is_dir() and cfg and cfg.is_file()):
+                logger.error("入力フォルダ、設定ファイル、出力フォルダのいずれかが無効です")
                 messagebox.showerror("エラー", "入力フォルダ、設定ファイル、出力フォルダを正しく指定してください。")
                 return
+            
             missing = None if self.missing_var.get() == "" else self.missing_var.get()
             temp_dir = Path(self.temp_var.get()) if self.use_temp.get() else None
+            logger.debug(f"実行パラメータ: missing_elev={missing}, temp_dir={temp_dir}")
+            
             out_path = run_p5(
                 input_dir=in_dir,
                 config_file=cfg,
@@ -172,6 +189,7 @@ class P5GUI(tk.Toplevel):
                 missing_elev=missing,
                 temp_dir=temp_dir
             )
+            logger.info(f"処理完了: 出力ファイル={out_path}")
             # 完了ダイアログを表示し、OK が押されたら Toplevel を閉じる
             if messagebox.showinfo("完了", f"Excelを出力しました:\n{out_path}") == "ok":
                 self.destroy()
@@ -180,6 +198,7 @@ class P5GUI(tk.Toplevel):
 
     def open_manual(self):
         """Notion マニュアルを既定ブラウザで開く"""
+        logger.info("マニュアルを開く")
         webbrowser.open("https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=25#1f4ed1e8e79f80fba2c3c518b62fc898")
 
 if __name__ == "__main__":

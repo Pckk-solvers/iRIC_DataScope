@@ -101,18 +101,18 @@ if __name__ == "__main__":
     grid_points = [(10, 5), (20, 15)]
     variables = ["watersurfaceelevation(m)", "vorticity(s-1)"]
 
-    print("--- list_csv_files テスト ---")
+    logger.info("--- list_csv_files テスト ---")
     try:
         files = list_csv_files(sample_dir)
-        print(f"見つかったファイル数: {len(files)}")
+        logger.info(f"見つかったファイル数: {len(files)}")
     except Exception as e:
-        print(f"list_csv_files エラー: {e}")
+        logger.error(f"list_csv_files エラー: {e}", exc_info=True)
 
-    print("\n--- aggregate_all テスト ---")
+    logger.info("\n--- aggregate_all テスト ---")
     try:
         data = aggregate_all(sample_dir, grid_points, variables)
         for key, df_ts in data.items():
-            print(f"\n格子点 {key} の先頭データ:")
-            print(df_ts.head())
+            logger.info(f"\n格子点 {key} の先頭データ:")
+            logger.debug(df_ts.head().to_string())
     except Exception as e:
-        print(f"aggregate_all エラー: {e}")
+        logger.error(f"aggregate_all エラー: {e}", exc_info=True)

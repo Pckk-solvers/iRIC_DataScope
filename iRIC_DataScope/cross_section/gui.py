@@ -9,9 +9,13 @@
 """
 import sys
 import webbrowser
+import logging
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+
+# ロガー設定
+logger = logging.getLogger(__name__)
 
 # スクリプト単体実行時にパッケージを認識させる
 if __name__ == "__main__" and __package__ is None:
@@ -23,6 +27,7 @@ from .plot_main import plot_main
 
 class ProfilePlotGUI(tk.Toplevel):
     def __init__(self, master, input_dir: Path, output_dir: Path):
+        logger.info(f"GUI インスタンス作成: input_dir={input_dir}, output_dir={output_dir}")
         super().__init__(master)
         self.master = master
         self.input_dir = input_dir
@@ -49,6 +54,7 @@ class ProfilePlotGUI(tk.Toplevel):
         self._toggle_manual_entries()  # 初期状態を設定
 
     def _build_ui(self):
+        logger.info("GUI ビルド開始")
         pad = {'padx': 8, 'pady': 4}
         # 入力フォルダ
         tk.Label(self, text="入力フォルダ:").grid(row=0, column=0, sticky="e", **pad)
@@ -164,8 +170,10 @@ class ProfilePlotGUI(tk.Toplevel):
         self.ymax_entry.configure(state=state)
 
     def _select_file(self):
+        logger.info("ファイル選択ダイアログを開く")
         file = filedialog.askopenfilename(title="対象CSVを選択", filetypes=[("CSV ファイル","*.csv"),("All files","*.*")])
         if file:
+            logger.info(f"ファイル選択: {file}")
             self.file_var.set(file)
 
     def _parse_include_ids(self, text: str):
@@ -186,19 +194,26 @@ class ProfilePlotGUI(tk.Toplevel):
         return sorted(ids)
 
     def _run(self):
+        logger.info("実行ボタン押下")
         in_dir = Path(self.input_var.get())
         out_dir = Path(self.output_var.get())
+        logger.debug(f"入力フォルダ: {in_dir}, 出力フォルダ: {out_dir}")
+        
         if not in_dir.is_dir():
+            logger.error(f"入力フォルダが無効: {in_dir}")
             messagebox.showerror("エラー", f"入力フォルダが無効です:\n{in_dir}")
             return
         if not out_dir.is_dir():
+            logger.error(f"出力フォルダが無効: {out_dir}")
             messagebox.showerror("エラー", f"出力フォルダが無効です:\n{out_dir}")
             return
 
         mode = self.mode_var.get()
+        logger.info(f"実行モード: {mode}")
         sel_file = None
         if mode == 'single':
             file_path = Path(self.file_var.get())
+            logger.debug(f"選択ファイル: {file_path}")
             if not file_path.is_file():
                 messagebox.showerror("エラー", "対象ファイルが選択されていないか無効です。")
                 return
