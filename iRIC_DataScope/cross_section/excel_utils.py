@@ -1,16 +1,12 @@
 # iRIC_DataScope\cross_section\excel_utils.py
 
 from pathlib import Path
-from typing import Dict
+from typing import Dict, Optional, Tuple
+
+import math
 import pandas as pd
 import numpy as np
-import math
 import xlsxwriter
-
-from pathlib import Path
-from typing import Dict, Optional, Tuple
-import pandas as pd
-import math
 
 def write_profile_charts(
     grouped_data: Dict[float, Dict[float, pd.DataFrame]],
