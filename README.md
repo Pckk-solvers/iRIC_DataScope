@@ -56,24 +56,36 @@ python iRIC_DataScope/app.py
 ```
 iRIC_DataScope/
 ├── iRIC_DataScope/          # メインパッケージ
-│   ├── app.py              # アプリケーションエントリーポイント
-│   ├── common/             # 共通モジュール
-│   │   ├── csv_reader.py   # CSVファイル読み込み処理
-│   │   └── logging_config.py # ロギング設定
-│   ├── cross_section/      # 横断重ね合わせ図作成功能
-│   │   ├── gui.py         # GUI実装
-│   │   └── plot_main.py   # プロット処理
-│   ├── lr_wse/            # 左右岸最大水位整理機能
-│   │   ├── gui.py         # GUI実装
-│   │   ├── main.py        # メイン処理
-│   │   ├── config.py      # 設定処理
-│   │   ├── extractor.py   # データ抽出処理
-│   │   └── writer.py      # Excel出力処理
-│   └── time_series/        # 時系列データ処理
-│       ├── gui_components.py # GUIコンポーネント
-│       ├── main.py        # メイン処理
-│       └── processor.py   # データ処理
-└── requirements.txt        # 必要なパッケージリスト
+│   ├── app.py               # アプリケーションエントリーポイント
+│   ├── common/              # 共通モジュール
+│   │   ├── csv_reader.py    # CSVファイル読み込み処理
+│   │   ├── io_selector.py   # 入力ダイアログ
+│   │   ├── logging_config.py# ロギング設定
+│   │   ├── path_selector.py # ファイル選択補助
+│   │   └── ui_config.py     # GUI設定
+│   ├── cross_section/       # 横断重ね合わせ図作成機能
+│   │   ├── data_loader.py   # データ読み込み
+│   │   ├── excel_utils.py   # Excel 書き出し
+│   │   ├── gui.py           # GUI実装
+│   │   ├── plot_core.py     # プロット処理コア
+│   │   └── plot_main.py     # 実行用モジュール
+│   ├── lr_wse/              # 左右岸最大水位整理機能
+│   │   ├── config.py        # 設定処理
+│   │   ├── extractor.py     # データ抽出処理
+│   │   ├── file_utils.py    # ファイル操作
+│   │   ├── gui.py           # GUI実装
+│   │   ├── main.py          # メイン処理
+│   │   ├── reader.py        # 読み込み処理
+│   │   └── writer.py        # Excel出力処理
+│   └── time_series/         # 時系列データ処理
+│       ├── excel_writer.py  # Excel出力処理
+│       ├── gui_components.py# GUIコンポーネント
+│       ├── main.py          # メイン処理
+│       └── processor.py     # データ処理
+├── requirements.txt         # 必要なパッケージリスト
+└── sample_config/           # 設定サンプル
+    ├── setting.csv
+    └── 格子設定サンプル.csv
 ```
 
 ## ロギング
