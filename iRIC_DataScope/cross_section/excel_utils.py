@@ -164,6 +164,8 @@ def write_profile_charts(
                 chart.set_legend({'none': True})
             if show_title:
                 chart.set_title({'name': f"I = {int(pid)}"})
+            else:
+                chart.set_title({'none': True})  # タイトルを明示的に非表示に
             chart.set_size({
                 'width':  int(480 * x_scale),
                 'height': int(320 * y_scale),
