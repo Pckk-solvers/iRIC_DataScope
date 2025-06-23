@@ -1,5 +1,13 @@
 # iRIC_DataScope
+本リポジトリではツール利用者とiRICの計算結果整理ツールの開発者へ向けたものとなっております。
 
+
+利用者は**iRIC_DataScope-[バージョン番号].exe**をダウンロードしてダブルクリックで実行してください。
+
+
+開発者へは
+
+[詳しくはこちら](## 技術スタック)
 ## 概要
 iRIC_DataScopeは、iRIC（International River Interface Cooperative）のシミュレーション結果を解析・抽出・可視化するためのツールです。GUIインターフェースを提供し、以下の機能を実装しています：
 
@@ -83,9 +91,12 @@ iRIC_DataScope/
 │       ├── main.py          # メイン処理
 │       └── processor.py     # データ処理
 ├── requirements.txt         # 必要なパッケージリスト
-└── sample_config/           # 設定サンプル
-    ├── setting.csv
-    └── 格子設定サンプル.csv
+├── sample_config/           # 設定サンプル
+│   ├── setting.csv
+│   └── 格子設定サンプル.csv
+│
+├── iRIC_DataScope-[バージョン番号].exe    # 利用者向けツール実行ファイル
+
 ```
 
 ## ロギング
