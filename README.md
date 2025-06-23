@@ -5,7 +5,7 @@
 利用者は**iRIC_DataScope-[バージョン番号].exe**をダウンロードしてダブルクリックで実行してください。
 
 
-開発者は[Releases](Releases)でバージョン管理をしているためそちらも合わせてご確認ください。
+開発者は[Releases](https://github.com/Pckk-solvers/iRIC_DataScope/releases)でバージョン管理をしているためそちらも合わせてご確認ください。
 
 
 ## 概要
