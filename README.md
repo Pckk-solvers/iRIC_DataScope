@@ -7,7 +7,7 @@
 
 開発者へは
 
-[詳しくはこちら](## 技術スタック)
+[詳しくはこちら](#技術スタック)
 ## 概要
 iRIC_DataScopeは、iRIC（International River Interface Cooperative）のシミュレーション結果を解析・抽出・可視化するためのツールです。GUIインターフェースを提供し、以下の機能を実装しています：
 
