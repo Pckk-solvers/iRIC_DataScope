@@ -5,9 +5,9 @@
 利用者は**iRIC_DataScope-[バージョン番号].exe**をダウンロードしてダブルクリックで実行してください。
 
 
-開発者へは
+開発者は[Releases](Releases)でバージョン管理をしているためそちらも合わせてご確認ください。
 
-[詳しくはこちら](#技術スタック)
+
 ## 概要
 iRIC_DataScopeは、iRIC（International River Interface Cooperative）のシミュレーション結果を解析・抽出・可視化するためのツールです。GUIインターフェースを提供し、以下の機能を実装しています：
 
