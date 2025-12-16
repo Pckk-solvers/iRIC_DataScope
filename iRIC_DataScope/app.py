@@ -8,6 +8,7 @@ import sys
 import logging
 from pathlib import Path
 import tkinter as tk
+from tkinter import messagebox
 import webbrowser
 
 # スクリプト単体実行時にパッケージを認識させる
@@ -22,9 +23,12 @@ logger = logging.getLogger(__name__)
 
 # GUI コンポーネントの読み込み
 from iRIC_DataScope.common.io_selector import IOFolderSelector
+from iRIC_DataScope.common.cgns_converter import ConversionOptions, convert_iric_project
 from iRIC_DataScope.lr_wse.gui import P5GUI
 from iRIC_DataScope.cross_section.gui import ProfilePlotGUI
 from iRIC_DataScope.time_series.gui_components import TimeSeriesGUI
+
+CONVERTIBLE_SUFFIXES = {".ipro", ".cgn"}
 
 
 class App2(tk.Tk):
@@ -129,15 +133,103 @@ class App2(tk.Tk):
         """
         in_dir = self.io_panel.input_selector.var.get()
         out_dir = self.io_panel.output_selector.var.get()
-        ok = bool(in_dir and out_dir and Path(in_dir).is_dir() and Path(out_dir).is_dir())
+        in_path = Path(in_dir) if in_dir else None
+        out_path = Path(out_dir) if out_dir else None
+        in_ok = bool(
+            in_path
+            and in_path.exists()
+            and (in_path.is_dir() or in_path.suffix.lower() in CONVERTIBLE_SUFFIXES)
+        )
+        out_ok = bool(out_path and out_path.is_dir())
+        ok = in_ok and out_ok
         state = "normal" if ok else "disabled"
         for btn in (self.btn_p5, self.btn_plot, self.btn_ts):
             btn.configure(state=state)
         logger.debug(f"App2: Validation result: input='{in_dir}', output='{out_dir}', buttons_enabled={ok}")
 
+    def _show_progress(self, text: str) -> tk.Toplevel:
+        """簡易プログレス表示用の小ウィンドウを出す"""
+        win = tk.Toplevel(self)
+        win.title("変換中")
+        win.transient(self)
+        win.resizable(False, False)
+        tk.Label(win, text=text, padx=20, pady=15).pack()
+        win.update_idletasks()
+        self.update_idletasks()
+        return win
+
+    def _prepare_input_for_tool(self) -> Path | None:
+        """
+        入力が .ipro/.cgn の場合は CSV 変換して変換先フォルダを返す。
+        既存CSVがある場合は上書き確認を出し、キャンセルなら再利用。
+        エラー時は None。
+        """
+        in_path = self.io_panel.get_input_dir()
+        out_dir = self.io_panel.get_output_dir()
+
+        if in_path.is_file() and in_path.suffix.lower() in CONVERTIBLE_SUFFIXES:
+            conv_dir = out_dir / f"converted_{in_path.stem}"
+            conv_dir.mkdir(parents=True, exist_ok=True)
+
+            existing_csv = list(conv_dir.glob("*.csv"))
+            if existing_csv:
+                overwrite = messagebox.askyesno(
+                    "確認",
+                    f"{conv_dir} に既存の CSV が見つかりました。\n"
+                    "上書きして再変換しますか？\n"
+                    "（いいえ を選ぶと既存CSVを再利用します）"
+                )
+                if not overwrite:
+                    # 再利用するのでパスだけ返す
+                    self.io_panel.input_selector.var.set(str(conv_dir))
+                    return conv_dir
+
+            progress = None
+            try:
+                if in_path.suffix.lower() == ".ipro":
+                    progress = self._show_progress("ipro を展開して CSV へ変換中です...")
+                else:
+                    progress = self._show_progress("CGNS を CSV へ変換中です...")
+                # すぐに描画する
+                if progress:
+                    progress.update()
+                    self.update()
+
+                convert_iric_project(
+                    in_path,
+                    conv_dir,
+                    options=ConversionOptions(
+                        include_flow_solution=True,
+                        location_preference="auto",
+                    ),
+                )
+                # 先にプログレスを閉じてから完了ダイアログ
+                if progress and progress.winfo_exists():
+                    progress.destroy()
+                    progress = None
+                self.io_panel.input_selector.var.set(str(conv_dir))
+                messagebox.showinfo("変換完了", f"CGNS→CSV 変換が完了しました。\n出力先: {conv_dir}")
+                return conv_dir
+            except Exception:
+                logger.exception("CSV 変換に失敗しました")
+                if progress and progress.winfo_exists():
+                    progress.destroy()
+                    progress = None
+                messagebox.showerror(
+                    "変換エラー",
+                    "CSV 変換に失敗しました。詳細はログを確認してください。"
+                )
+                return None
+
+        # 既にフォルダを指している場合はそのまま返す
+        return in_path
+
     def open_p5(self):
         """左右岸水位抽出ツールを開く"""
-        in_dir, out_dir = self.io_panel.get_input_dir(), self.io_panel.get_output_dir()
+        out_dir = self.io_panel.get_output_dir()
+        in_dir = self._prepare_input_for_tool()
+        if not in_dir:
+            return
         logger.info(f"App2: Opening P5GUI (in_dir={in_dir}, out_dir={out_dir})")
         if self._p5_win and self._p5_win.winfo_exists():
             logger.debug("App2: P5GUI already open, lifting window")
@@ -152,11 +244,14 @@ class App2(tk.Tk):
         logger.debug("App2: Closing P5GUI window")
         if self._p5_win:
             self._p5_win.destroy()
-            self._p5_win = None
+        self._p5_win = None
 
     def open_plot(self):
         """プロファイルプロットツールを開く"""
-        in_dir, out_dir = self.io_panel.get_input_dir(), self.io_panel.get_output_dir()
+        out_dir = self.io_panel.get_output_dir()
+        in_dir = self._prepare_input_for_tool()
+        if not in_dir:
+            return
         logger.info(f"App2: Opening ProfilePlotGUI (in_dir={in_dir}, out_dir={out_dir})")
         if self._plot_win and self._plot_win.winfo_exists():
             logger.debug("App2: ProfilePlotGUI already open, lifting window")
@@ -171,11 +266,14 @@ class App2(tk.Tk):
         logger.debug("App2: Closing ProfilePlotGUI window")
         if self._plot_win:
             self._plot_win.destroy()
-            self._plot_win = None
+        self._plot_win = None
 
     def open_ts(self):
         """時系列抽出ツール GUI を起動"""
-        in_dir, out_dir = self.io_panel.get_input_dir(), self.io_panel.get_output_dir()
+        out_dir = self.io_panel.get_output_dir()
+        in_dir = self._prepare_input_for_tool()
+        if not in_dir:
+            return
         logger.info(f"App2: Opening TimeSeriesGUI (in_dir={in_dir}, out_dir={out_dir})")
         if self._ts_win and self._ts_win.winfo_exists():
             logger.debug("App2: TimeSeriesGUI already open, lifting window")

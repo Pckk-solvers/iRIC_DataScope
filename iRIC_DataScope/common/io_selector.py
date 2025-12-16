@@ -3,13 +3,48 @@
 共通UIコンポーネント: 入力フォルダと出力フォルダを一組で選択するパネル
 """
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, filedialog
 from pathlib import Path
 from .path_selector import PathSelector
 
+
+class ProjectPathSelector(ttk.Frame):
+    """
+    入力: フォルダ or .ipro/.cgn ファイルを選択できるセレクタ。
+    """
+    def __init__(self, master, label: str = "入力パス:", **kwargs):
+        super().__init__(master, **kwargs)
+        self.var = tk.StringVar()
+        ttk.Label(self, text=label).grid(row=0, column=0, sticky="w", padx=5, pady=5)
+        ttk.Entry(self, textvariable=self.var, width=40).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
+        ttk.Button(self, text="フォルダ", command=self._select_dir).grid(row=0, column=2, padx=2)
+        ttk.Button(self, text="ファイル", command=self._select_file).grid(row=0, column=3, padx=2)
+        self.columnconfigure(1, weight=1)
+
+    def _select_dir(self):
+        path = filedialog.askdirectory(title="入力フォルダを選択")
+        if path:
+            self.var.set(path)
+
+    def _select_file(self):
+        path = filedialog.askopenfilename(
+            title="入力ファイルを選択 (.ipro / .cgn)",
+            filetypes=[
+                ("iRIC project / CGNS", "*.ipro;*.cgn"),
+                ("All files", "*.*"),
+            ]
+        )
+        if path:
+            self.var.set(path)
+
+    def get_path(self) -> Path:
+        """現在の入力パスを Path で返す（フォルダ or ファイル）"""
+        return Path(self.var.get())
+
+
 class IOFolderSelector(ttk.Frame):
     """
-    入力ディレクトリと出力ディレクトリを一度に選択・取得できるウィジェット。
+    入力（フォルダ or ipro/cgn）と出力フォルダを一度に選択・取得できるウィジェット。
 
     Attributes:
         input_selector (PathSelector): 入力フォルダ選択用
@@ -17,8 +52,8 @@ class IOFolderSelector(ttk.Frame):
     """
     def __init__(self, master, **kwargs):
         super().__init__(master, **kwargs)
-        # 入力フォルダ
-        self.input_selector = PathSelector(self, label="入力フォルダ:", mode="directory")
+        # 入力（フォルダ or ipro/cgn）
+        self.input_selector = ProjectPathSelector(self, label="入力パス:")
         self.input_selector.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
         # 出力フォルダ
         self.output_selector = PathSelector(self, label="出力フォルダ:", mode="directory")
@@ -26,7 +61,7 @@ class IOFolderSelector(ttk.Frame):
         self.columnconfigure(0, weight=1)
 
     def get_input_dir(self) -> Path:
-        """選択された入力フォルダの Path を返す"""
+        """選択された入力 Path を返す（フォルダ or ファイル）"""
         return Path(self.input_selector.get_path())
 
     def get_output_dir(self) -> Path:
