@@ -2,7 +2,10 @@ venv/
 **/dist/
 **/build/
 **/__pycache__/
+*.ipro
+*.cgn
 logs/
 output/
+output2
 sample_data_randomname/
 sample_data/
