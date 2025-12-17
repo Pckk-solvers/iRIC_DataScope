@@ -1,5 +1,8 @@
+from iRIC_DataScope.app import main as app_main
+
+
 def main():
-    print("Hello from iric-datascope!")
+    app_main()
 
 
 if __name__ == "__main__":

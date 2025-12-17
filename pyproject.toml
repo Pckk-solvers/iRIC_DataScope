@@ -11,3 +11,8 @@ dependencies = [
     "pandas>=2.3.3",
     "xlsxwriter>=3.2.9",
 ]
+
+[dependency-groups]
+dev = [
+    "pyinstaller>=6.17.0",
+]

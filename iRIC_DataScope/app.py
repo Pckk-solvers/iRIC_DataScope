@@ -296,9 +296,10 @@ class App2(tk.Tk):
         logger.info(f"App2: Opening manual URL: {url}")
         webbrowser.open(url)
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None):
+    """エントリポイント: ランチャー起動"""
     logger.info("app2ランチャーを開始します")
-    args = sys.argv[1:]
+    args = sys.argv[1:] if argv is None else argv
     app = App2()
     if len(args) == 2:
         in_arg, out_arg = args
@@ -306,3 +307,7 @@ if __name__ == "__main__":
         app.io_panel.output_selector.var.set(out_arg)
         app._validate()
     app.mainloop()
+
+
+if __name__ == "__main__":
+    main()

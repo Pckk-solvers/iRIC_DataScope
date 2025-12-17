@@ -37,7 +37,7 @@ beta2でログ強化。
   pyinstaller `
   --onefile `
   --windowed `
-  --name iRIC_DataScope-1.0-beta.3  `
+  --name iRIC_DataScope-v1.0.4  `
   --add-data "iRIC_DataScope;iRIC_DataScope" `
   --hidden-import=tkinter.ttk `
   --hidden-import=tkinter.messagebox `
@@ -45,4 +45,42 @@ beta2でログ強化。
   --hidden-import=logging.handlers `
   --hidden-import=xlsxwriter `
   --collect-all pandas `
+  --collect-all h5py `
+  iRIC_DataScope\app.py
+
+  12/16
+  ipro/cgn 変換追加、依存追加版（pandas/numpy/h5py/openpyxl/xlsxwriter）
+  pyinstaller `
+  --onefile `
+  --windowed `
+  --name iRIC_DataScope-v1.0.4  `
+  --add-data "iRIC_DataScope;iRIC_DataScope" `
+  --hidden-import=tkinter.ttk `
+  --hidden-import=tkinter.messagebox `
+  --hidden-import=tkinter.filedialog `
+  --hidden-import=logging.handlers `
+  --collect-all pandas `
+  --collect-all numpy `
+  --collect-all h5py `
+  --collect-all openpyxl `
+  --collect-all xlsxwriter `
+  iRIC_DataScope\app.py
+
+  12/16
+  サイズを抑えた最小構成（collect-all を避ける）
+  pyinstaller `
+  --onefile `
+  --windowed `
+  --noconfirm `
+  --clean `
+  --name iRIC_DataScope-v1.0.4-min  `
+  --add-data "iRIC_DataScope;iRIC_DataScope" `
+  --hidden-import=logging.handlers `
+  --hidden-import=tkinter.ttk `
+  --hidden-import=tkinter.filedialog `
+  --hidden-import=tkinter.messagebox `
+  --collect-submodules pandas `
+  --collect-submodules h5py `
+  --collect-submodules openpyxl `
+  --collect-submodules xlsxwriter `
   iRIC_DataScope\app.py
