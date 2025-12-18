@@ -10,19 +10,26 @@
 
 ## スコープ
 ### 対象
-- 入力: `.ipro` または `.cgn`（CSV 変換はしない）
+- 入力: `.ipro` / `.cgn` / CSVフォルダ（`Result_*.csv`）
 - 出力: 画像ファイル（PNG を想定、拡張子は将来追加可能）
 - 表示: Matplotlib による散布図（Value を色で表現）+ カラーバー
 
 ### 非対象（当面）
 - 境界データの可視化
-- CSV 入力の取り込み（本機能は CGNS を直接読む）
 - アニメーション（GIF/MP4）出力（将来検討）
 
 ## 入力
 ### 1) 入力ファイル
-- ランチャーで選択された `.ipro` または `.cgn`
+- ランチャーで選択された入力パスを対象とする
+  - `.ipro` の場合: 内部の CGNS（`Case1.cgn`）を展開して読み込む
+  - `.cgn` の場合: CGNS を直接読み込む
+  - フォルダの場合: **CSVフォルダ（`Result_*.csv`）**として読み込む（CGNS のフォルダ入力は対象外）
 - `.ipro` の場合は内部の `Case1.cgn`（将来オプション化予定）
+
+### 1-1) CSVフォルダ入力の前提
+- 1ステップ = `Result_*.csv` 1ファイル
+- CSV は iRIC 互換フォーマット（先頭2行: `iRIC output t = ...` と `imax,jmax`）を想定
+- ステップ番号はファイル名（`Result_{n}.csv`）から取得し、取得できない場合はソート順で連番とする
 
 ### 2) 変数（Value）
 - ユーザが選択した 1 変数を Value として使用
@@ -105,8 +112,9 @@
 
 ## 実装方針（予定）
 - データ取得:
-  - `iRIC_DataScope/common/cgns_reader.py` の `iter_iric_step_frames_from_input()` を使用
-  - CSV 変換はしない（DataFrame を直接処理）
+  - CGNS入力: `iRIC_DataScope/common/cgns_reader.py` の `iter_iric_step_frames_from_input()` を使用
+  - CSVフォルダ入力: `iRIC_DataScope/common/csv_reader.py` の `list_csv_files()` / `read_iric_csv()` を使用
+  - どちらの場合も DataFrame を直接処理する（画像化のために CSV 変換は不要）
 - ROI 適用:
   - `df[(xmin <= df["X"]) & (df["X"] <= xmax) & (ymin <= df["Y"]) & (df["Y"] <= ymax)]`
 - 画像出力:
