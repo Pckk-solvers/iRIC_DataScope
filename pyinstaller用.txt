@@ -104,10 +104,8 @@ beta2でログ強化。
   --collect-submodules xlsxwriter `
   --collect-data matplotlib `
   --hidden-import=matplotlib.backends.backend_tkagg `
-  --collect-submodules scipy `
   main.py
 
   補足:
   - `--collect-all pandas` は確実性重視の指定（pandas は内部で動的 import / バイナリ拡張が多く、環境によっては不足して落ちるため）
   - `matplotlib` が不足する場合は `--collect-submodules matplotlib` も追加（ただしサイズが増えます）
-  - `scipy` が不足する場合は `--collect-all scipy` も検討（サイズが増えます）

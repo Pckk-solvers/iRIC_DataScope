@@ -152,26 +152,6 @@ def downsample_grid_for_preview(
     )
 
 
-def interpolate_grid(
-    grid: RoiGrid,
-    *,
-    roi: Roi,
-    factor: int = 2,
-    method: Literal["linear", "cubic"] = "cubic",
-) -> RoiGrid:
-    if factor <= 1:
-        return RoiGrid(x=grid.x, y=grid.y, v=grid.v, mask=grid.mask)
-
-    from scipy.ndimage import zoom
-
-    order = 1 if method == "linear" else 3
-    x2 = zoom(grid.x, zoom=(factor, factor), order=order)
-    y2 = zoom(grid.y, zoom=(factor, factor), order=order)
-    v2 = zoom(np.asarray(grid.v, dtype=float), zoom=(factor, factor), order=order)
-    m2 = (roi.xmin <= x2) & (x2 <= roi.xmax) & (roi.ymin <= y2) & (y2 <= roi.ymax)
-    return RoiGrid(x=x2, y=y2, v=v2, mask=m2)
-
-
 def _sanitize_name(name: str) -> str:
     return re.sub(r"[\\\\/:*?\"<>|]+", "_", name)
 

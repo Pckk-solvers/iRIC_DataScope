@@ -13,7 +13,6 @@ from .processor import (
     build_colormap,
     compute_global_value_range,
     frame_to_grids,
-    interpolate_grid,
     slice_grids_to_roi,
 )
 
@@ -30,9 +29,6 @@ def export_xy_value_maps(
     max_color: str,
     scale_mode: Literal["global", "manual"] = "global",
     manual_scale: tuple[float, float] | None = None,
-    render_mode: Literal["mesh", "interp"] = "interp",
-    interp_factor: int = 2,
-    interp_method: Literal["linear", "cubic"] = "cubic",
     progress=None,
     dpi: int = 150,
 ) -> Path:
@@ -81,11 +77,6 @@ def export_xy_value_maps(
         if grid is None:
             logger.info("Skip step=%s: ROI内に点がありません", frame.step)
             continue
-
-        if render_mode == "interp":
-            factor = max(1, int(interp_factor or 1))
-            method = "linear" if interp_method == "linear" else "cubic"
-            grid = interpolate_grid(grid, roi=roi, factor=factor, method=method)
 
         vals = apply_mask_to_values(grid.v, grid.mask)
         finite = vals[np.isfinite(vals)]

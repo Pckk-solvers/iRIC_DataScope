@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-import math
 import threading
 import tkinter as tk
 import webbrowser
@@ -21,7 +20,6 @@ from .processor import (
     compute_global_value_range,
     downsample_grid_for_preview,
     frame_to_grids,
-    interpolate_grid,
     parse_color,
     slice_grids_to_roi,
 )
@@ -153,40 +151,22 @@ class XYValueMapGUI(tk.Toplevel):
         self.vmin_var.trace_add("write", lambda *_: self._schedule_preview_update())
         self.vmax_var.trace_add("write", lambda *_: self._schedule_preview_update())
 
-        # 描画
-        ttk.Label(self, text="描画:").grid(row=6, column=0, sticky="e", **pad)
-        self.render_mode = tk.StringVar(value="interp")
-        ttk.Radiobutton(self, text="メッシュ", value="mesh", variable=self.render_mode, command=self._on_render_mode_changed).grid(row=6, column=1, sticky="w", **pad)
-        ttk.Radiobutton(self, text="補間", value="interp", variable=self.render_mode, command=self._on_render_mode_changed).grid(row=6, column=2, sticky="w", **pad)
-
-        ttk.Label(self, text="倍率:").grid(row=6, column=3, sticky="e", **pad)
-        self.interp_factor_var = tk.IntVar(value=2)
-        self.interp_factor_spin = tk.Spinbox(self, from_=1, to=8, textvariable=self.interp_factor_var, width=8)
-        self.interp_factor_spin.grid(row=6, column=4, sticky="w", **pad)
-
-        self.interp_method_var = tk.StringVar(value="cubic")
-        self.interp_method_combo = ttk.Combobox(self, textvariable=self.interp_method_var, values=["linear", "cubic"], state="readonly", width=8)
-        self.interp_method_combo.grid(row=6, column=5, sticky="w", **pad)
-
-        self.interp_factor_var.trace_add("write", lambda *_: self._schedule_preview_update())
-        self.interp_method_var.trace_add("write", lambda *_: self._schedule_preview_update())
-
         # ステータス
         self.status_var = tk.StringVar(value="")
-        ttk.Label(self, textvariable=self.status_var).grid(row=7, column=0, columnspan=6, sticky="w", padx=8, pady=(2, 6))
+        ttk.Label(self, textvariable=self.status_var).grid(row=6, column=0, columnspan=6, sticky="w", padx=8, pady=(2, 6))
 
         # プレビュー
         preview_frame = ttk.LabelFrame(self, text="プレビュー（ROIはドラッグで指定）")
-        preview_frame.grid(row=8, column=0, columnspan=6, sticky="nsew", padx=8, pady=8)
+        preview_frame.grid(row=7, column=0, columnspan=6, sticky="nsew", padx=8, pady=8)
         self._build_preview(preview_frame)
 
         # 実行
-        ttk.Button(self, text="実行（全ステップ出力）", command=self._run).grid(row=9, column=0, columnspan=6, pady=10)
+        ttk.Button(self, text="実行（全ステップ出力）", command=self._run).grid(row=8, column=0, columnspan=6, pady=10)
 
         # layout
         self.grid_columnconfigure(1, weight=1)
         self.grid_columnconfigure(4, weight=1)
-        self.grid_rowconfigure(8, weight=1)
+        self.grid_rowconfigure(7, weight=1)
 
     def _build_preview(self, parent):
         # Matplotlib は重いので遅延 import
@@ -238,7 +218,6 @@ class XYValueMapGUI(tk.Toplevel):
         self.ymax_var.set(ymax)
 
         self._on_scale_mode_changed()
-        self._on_render_mode_changed()
         self._schedule_preview_update(immediate=True)
 
     def _on_close(self):
@@ -270,13 +249,6 @@ class XYValueMapGUI(tk.Toplevel):
         manual = self.scale_mode.get() == "manual"
         self.vmin_entry.configure(state="normal" if manual else "disabled")
         self.vmax_entry.configure(state="normal" if manual else "disabled")
-        self._schedule_preview_update(immediate=True)
-
-    def _on_render_mode_changed(self):
-        interp = self.render_mode.get() == "interp"
-        state = "normal" if interp else "disabled"
-        self.interp_factor_spin.configure(state=state)
-        self.interp_method_combo.configure(state="readonly" if interp else "disabled")
         self._schedule_preview_update(immediate=True)
 
     def _reset_roi_to_full(self):
@@ -396,27 +368,7 @@ class XYValueMapGUI(tk.Toplevel):
             self._draw_empty_preview(roi)
             return
 
-        if self.render_mode.get() == "interp":
-            try:
-                factor = int(self.interp_factor_var.get() or 2)
-            except Exception:
-                factor = 2
-            method = (self.interp_method_var.get() or "cubic").strip()
-            grid = downsample_grid_for_preview(grid, max_points=20000)
-            factor = max(1, factor)
-            est = int(grid.x.size) * factor * factor
-            if est > 60000 and grid.x.size > 0:
-                factor = max(1, int(math.floor(math.sqrt(60000 / grid.x.size))))
-            if factor != int(self.interp_factor_var.get() or 2):
-                self.status_var.set(f"プレビュー軽量化のため倍率を {factor} に調整しました")
-            grid = interpolate_grid(
-                grid,
-                roi=roi,
-                factor=factor,
-                method="linear" if method == "linear" else "cubic",
-            )
-        else:
-            grid = downsample_grid_for_preview(grid, max_points=40000)
+        grid = downsample_grid_for_preview(grid, max_points=40000)
         vals_masked = apply_mask_to_values(grid.v, grid.mask)
 
         cmap = build_colormap(self.min_color_var.get(), self.max_color_var.get())
@@ -588,18 +540,6 @@ class XYValueMapGUI(tk.Toplevel):
         out_base = Path(self.output_var.get())
         out_dir = out_base / f"xy_value_map_{value_col}"
 
-        render_mode = "interp" if self.render_mode.get() == "interp" else "mesh"
-        if render_mode == "interp":
-            try:
-                interp_factor = int(self.interp_factor_var.get())
-            except Exception:
-                messagebox.showerror("エラー", "補間の倍率は整数で入力してください。")
-                return
-            interp_factor = max(1, min(8, interp_factor))
-        else:
-            interp_factor = 1
-        interp_method = "linear" if (self.interp_method_var.get() or "cubic") == "linear" else "cubic"
-
         progress = _ProgressWindow(self, title="出力中", maximum=self._data_source.step_count)
         try:
             export_xy_value_maps(
@@ -611,9 +551,6 @@ class XYValueMapGUI(tk.Toplevel):
                 max_color=max_color,
                 scale_mode=scale_mode,
                 manual_scale=scale,
-                render_mode=render_mode,
-                interp_factor=interp_factor,
-                interp_method=interp_method,
                 progress=progress,
             )
         except Exception as e:
