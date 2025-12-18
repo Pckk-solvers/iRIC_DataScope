@@ -66,7 +66,8 @@
   - カラーバー（Value のスケール）
 
 ## 表示仕様（プロット）
-- 描画: `matplotlib.pyplot.scatter(X, Y, c=Value, ...)`
+- 描画（既定）: `matplotlib.axes.Axes.pcolormesh(X2d, Y2d, Value2d, ...)`
+- 参考: 点描画（`scatter`）は点々になりやすいため本機能では非推奨
 - カラーバー: `plt.colorbar(...)`
 - 形状（縦横比）の保持:
   - `ax.set_aspect("equal", adjustable="box")` を基本とし、距離のスケールが歪まないようにする
@@ -78,6 +79,9 @@
 - スケール（色に割り当てる値の範囲）:
   - `global`（既定）: ROI 内の全ステップを通した min/max で固定（比較目的）
   - `manual`: ユーザが `vmin/vmax` を指定（例: 0〜10 を固定して比較したい場合）
+- 描画モード（連続表現）:
+  - `mesh`: 構造格子（I,J）を 2D 配列に戻し、`pcolormesh(shading="gouraud")` で面塗り
+  - `interp`: 上記に加えて SciPy で格子を補間してから描画（より滑らか、計算コスト増）
 
 ## 期待するユーザフロー（GUI）
 1) ランチャーで入力（`.ipro`/`.cgn`）と出力フォルダを選択
@@ -110,22 +114,29 @@
   - 形状を崩さないため、可能なら I/J のストライド間引き（構造格子前提）を優先する
   - 画像出力時はフル解像度で描画する（プレビューと出力を分ける）
 
-## 実装方針（予定）
-- データ取得:
-  - CGNS入力: `iRIC_DataScope/common/cgns_reader.py` の `iter_iric_step_frames_from_input()` を使用
-  - CSVフォルダ入力: `iRIC_DataScope/common/csv_reader.py` の `list_csv_files()` / `read_iric_csv()` を使用
-  - どちらの場合も DataFrame を直接処理する（画像化のために CSV 変換は不要）
-- ROI 適用:
-  - `df[(xmin <= df["X"]) & (df["X"] <= xmax) & (ymin <= df["Y"]) & (df["Y"] <= ymax)]`
-- 画像出力:
-  - GUI から起動する場合でも、保存処理は `matplotlib` の non-interactive backend（例: `Agg`）で行う
-- 進捗/失敗通知:
-  - 進捗ウィンドウ + 完了/失敗ダイアログ
+## 現状の実装
+- GUI: `iRIC_DataScope/xy_value_map/gui.py`
+  - `FigureCanvasTkAgg` + `RectangleSelector` によりプレビューと ROI 指定を同一画面で実現
+  - ROI/変数/色/スケール/step の変更はプレビューに即反映（200ms デバウンス）
+  - `global` スケールはバックグラウンド計算し、計算中はステータスを表示
+- データ取得: `iRIC_DataScope/xy_value_map/processor.py`
+  - `DataSource` が `.ipro` / `.cgn` / CSVフォルダ（`Result_*.csv`）を統一的に扱う
+  - `.ipro` は内部の `Case1.cgn` を一時ディレクトリへ展開し、セッション中は使い回す
+  - CGNS 読み込みは `iRIC_DataScope/common/cgns_reader.py`（`resolve_case_cgn`, `iter_iric_step_frames`）を利用
+  - CSVフォルダは `Result_*.csv` を走査し、必要列のみ `pandas.read_csv(usecols=...)` で読み込む
+  - 当面は「ノード座標系（X/Y と同 shape の変数）」のみを扱う
+- 画像出力: `iRIC_DataScope/xy_value_map/main.py`
+  - `global` は ROI 内の全ステップを 1 回走査して min/max を決め、全ステップで同一スケールに固定
+  - ROI 内が空のステップはスキップし、ログに残す
+  - 進捗は GUI の進捗ウィンドウで表示し、完了/失敗はダイアログで通知
 
 ## 依存ライブラリ
-- 追加候補: `matplotlib`
-  - 画像出力に必要
-  - PyInstaller への取り込み（collect/hidden-import）の考慮が必要
+- `matplotlib`（必須）
+  - 画像出力/プレビューに使用
+  - PyInstaller では環境により `--collect-data matplotlib` 等の追加が必要になる場合がある
+- `scipy`（補間モード用）
+  - 補間モード（滑らか表示）で使用
+  - exe サイズが増えやすいので、ビルドオプションの調整が必要になる場合がある
 
 ## エラーと扱い
 - Value 列が存在しない

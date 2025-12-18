@@ -27,6 +27,7 @@ from iRIC_DataScope.common.cgns_converter import ConversionOptions, convert_iric
 from iRIC_DataScope.lr_wse.gui import P5GUI
 from iRIC_DataScope.cross_section.gui import ProfilePlotGUI
 from iRIC_DataScope.time_series.gui_components import TimeSeriesGUI
+from iRIC_DataScope.xy_value_map.gui import XYValueMapGUI
 
 CONVERTIBLE_SUFFIXES = {".ipro", ".cgn"}
 
@@ -57,6 +58,7 @@ class App2(tk.Tk):
         self._p5_win   = None
         self._plot_win = None
         self._ts_win   = None
+        self._xy_win   = None
         logger.debug("App2: Initialization complete")
 
     def _configure_window(self):
@@ -111,7 +113,9 @@ class App2(tk.Tk):
                                   command=self.open_plot, state="disabled")
         self.btn_ts   = tk.Button(self, text="時系列データ抽出",
                                   command=self.open_ts, state="disabled")
-        for btn in (self.btn_p5, self.btn_plot, self.btn_ts):
+        self.btn_xy = tk.Button(self, text="X-Y分布画像出力",
+                                command=self.open_xy, state="disabled")
+        for btn in (self.btn_p5, self.btn_plot, self.btn_ts, self.btn_xy):
             btn.pack(fill="x", padx=20, pady=5)
         logger.debug("App2: Launch buttons created")
 
@@ -143,7 +147,7 @@ class App2(tk.Tk):
         out_ok = bool(out_path and out_path.is_dir())
         ok = in_ok and out_ok
         state = "normal" if ok else "disabled"
-        for btn in (self.btn_p5, self.btn_plot, self.btn_ts):
+        for btn in (self.btn_p5, self.btn_plot, self.btn_ts, self.btn_xy):
             btn.configure(state=state)
         logger.debug(f"App2: Validation result: input='{in_dir}', output='{out_dir}', buttons_enabled={ok}")
 
@@ -289,6 +293,23 @@ class App2(tk.Tk):
         if self._ts_win:
             self._ts_win.destroy()
             self._ts_win = None
+
+    def open_xy(self):
+        """X-Y分布画像出力ツールを開く（.ipro/.cgn は直接読み込む）"""
+        in_path = self.io_panel.get_input_dir()
+        out_dir = self.io_panel.get_output_dir()
+        logger.info(f"App2: Opening XYValueMapGUI (input={in_path}, out_dir={out_dir})")
+        if self._xy_win and self._xy_win.winfo_exists():
+            logger.debug("App2: XYValueMapGUI already open, lifting window")
+            self._xy_win.lift()
+            return
+        self._xy_win = XYValueMapGUI(self, input_path=in_path, output_dir=out_dir)
+        self._xy_win.bind("<Destroy>", self._on_destroy_xy)
+
+    def _on_destroy_xy(self, event):
+        if event.widget is self._xy_win:
+            logger.debug("App2: XYValueMapGUI destroyed")
+            self._xy_win = None
 
     def open_manual(self):
         """Notion のマニュアルを既定ブラウザで開く"""

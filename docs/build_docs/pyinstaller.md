@@ -17,7 +17,14 @@ pyinstaller ... main.py
   - `--hidden-import=logging.handlers` を追加
 - `ImportError: cannot import name 'ttk' from 'tkinter'`
   - `--hidden-import=tkinter.ttk` と `--hidden-import=tkinter.filedialog` / `--hidden-import=tkinter.messagebox` を追加
+- `matplotlib` 関連で起動時に落ちる / 画像出力だけ失敗する
+  - `matplotlib` はバックエンドや `mpl-data`（フォント等）の収集が必要になる場合があります
+  - まずは `--collect-data matplotlib` を追加し、それでも不足する場合は `--collect-submodules matplotlib` や `--hidden-import=matplotlib.backends.backend_tkagg` を追加
+- `scipy` 関連で起動時に落ちる / DLL が見つからない
+  - 補間モードを使う場合は `scipy` が必要です
+  - まずは `--collect-submodules scipy` を追加し、それでも不足する場合は `--collect-all scipy` を検討してください（サイズは増えます）
 
 ## サイズを下げたい場合
 - `--collect-all` はサイズが増えやすいので、まずは `--collect-submodules` を使い、足りないものだけ `--hidden-import` で追加していくのが安全です。
-
+- `--exclude-module` で不要なテスト系を外すと少し減る場合があります（例: `matplotlib.tests`, `pandas.tests`）
+- `--onefile` は便利ですがサイズが増えやすいので、サイズ優先なら `--onedir` も検討してください（配布形態次第）

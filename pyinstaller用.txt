@@ -84,3 +84,30 @@ beta2でログ強化。
   --collect-submodules openpyxl `
   --collect-submodules xlsxwriter `
   iRIC_DataScope\app.py
+
+  12/18
+  X-Y分布画像出力（matplotlib）追加版：推奨（main.py を入口にする）
+  pyinstaller `
+  --onefile `
+  --windowed `
+  --noconfirm `
+  --clean `
+  --name iRIC_DataScope-v1.0.4  `
+  --add-data "iRIC_DataScope;iRIC_DataScope" `
+  --hidden-import=logging.handlers `
+  --hidden-import=tkinter.ttk `
+  --hidden-import=tkinter.filedialog `
+  --hidden-import=tkinter.messagebox `
+  --collect-submodules pandas `
+  --collect-submodules h5py `
+  --collect-submodules openpyxl `
+  --collect-submodules xlsxwriter `
+  --collect-data matplotlib `
+  --hidden-import=matplotlib.backends.backend_tkagg `
+  --collect-submodules scipy `
+  main.py
+
+  補足:
+  - `--collect-all pandas` は確実性重視の指定（pandas は内部で動的 import / バイナリ拡張が多く、環境によっては不足して落ちるため）
+  - `matplotlib` が不足する場合は `--collect-submodules matplotlib` も追加（ただしサイズが増えます）
+  - `scipy` が不足する場合は `--collect-all scipy` も検討（サイズが増えます）
