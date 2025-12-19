@@ -2,10 +2,10 @@
 # -*- coding: utf-8 -*-
 # iRIC_DataScope\lr_wse\main.py
 """
-P_5: iRIC 左右岸最大水位整理ツール
+lr_wse: iRIC 左右岸最大水位整理ツール
 
 このモジュールは CLI および GUI から利用できるエントリポイントを統一化し、
-`run_p5` 関数を内部定義しています。
+`run_lr_wse` 関数を内部定義しています。
 """
 import argparse
 import logging
@@ -22,7 +22,7 @@ from .writer import combine_to_excel
 logger = logging.getLogger(__name__)
 
 
-def run_p5(
+def run_lr_wse(
     input_dir: Path,
     config_file: Path,
     output_dir: Path,
@@ -138,7 +138,7 @@ def main():
 
     try:
         logger.info("処理開始")
-        out_path = run_p5(
+        out_path = run_lr_wse(
             input_dir=args.input_dir,
             config_file=args.config_file,
             output_dir=args.output_dir,

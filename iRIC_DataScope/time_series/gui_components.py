@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # iRIC_DataScope\time_series\gui_components.py
 """
-iric_tools/time_series/gui_components.py:
+iRIC_DataScope/time_series/gui_components.py:
 時系列抽出ツール GUI リファクタリング版
 
 - 入力/出力フォルダの表示（編集不可）
@@ -345,7 +345,7 @@ class TimeSeriesGUI(tk.Toplevel):
 def launch_time_series_gui(master=None, initial_input_dir=None, initial_output_dir=None):
     """
     TimeSeriesGUI を生成して返す
-    （App2 が保持して lift/WM_DELETE_WINDOW を管理します）
+    （LauncherApp が保持して lift/WM_DELETE_WINDOW を管理します）
     """
     gui = TimeSeriesGUI(master, initial_input_dir, initial_output_dir)
     return gui

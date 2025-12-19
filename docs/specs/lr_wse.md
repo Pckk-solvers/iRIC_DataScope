@@ -17,6 +17,5 @@ iRIC 出力 CSV（`Result_*.csv`）から、設定に基づいて左右岸等の
   - `combine_to_excel()` で中間 CSV を統合して Excel を出力
 
 ## エントリポイント
-- GUI: `iRIC_DataScope/lr_wse/gui.py`（ランチャーから `P5GUI` を起動）
-- 処理本体: `iRIC_DataScope/lr_wse/main.py:run_p5()`
-
+- GUI: `iRIC_DataScope/lr_wse/gui.py`（ランチャーから `LrWseGUI` を起動）
+- 処理本体: `iRIC_DataScope/lr_wse/main.py:run_lr_wse()`

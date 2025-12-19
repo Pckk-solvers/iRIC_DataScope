@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 # iRIC_DataScope\lr_wse\gui.py
 """
-P_5 GUI: iRIC 左右岸最大水位整理ツール
+lr_wse GUI: iRIC 左右岸最大水位整理ツール
 このウィンドウは Toplevel で生成され、ランチャーの Tk を master に持ちます。
 """
 import sys
@@ -17,13 +17,13 @@ logger = logging.getLogger(__name__)
 
 # スクリプト単体実行時にパッケージを認識させる
 if __name__ == "__main__" and __package__ is None:
-    project_root = Path(__file__).resolve().parent.parent
-    sys.path.insert(0, str(project_root))
-    __package__ = "P_5"
+    repo_root = Path(__file__).resolve().parent.parent.parent
+    sys.path.insert(0, str(repo_root))
+    __package__ = "iRIC_DataScope.lr_wse"
 
-from .main import run_p5
+from .main import run_lr_wse
 
-class P5GUI(tk.Toplevel):
+class LrWseGUI(tk.Toplevel):
     """
     iRIC 左右岸最大水位整理ツール GUI
     - 入力/出力フォルダ
@@ -164,7 +164,7 @@ class P5GUI(tk.Toplevel):
             self.config_var.set(str(file))
 
     def _run(self):
-        """P5 実行処理を呼び出し、完了/エラーを通知"""
+        """左右岸水位抽出の実行処理を呼び出し、完了/エラーを通知"""
         logger.info("実行ボタン押下")
         try:
             in_dir = Path(self.input_var.get())
@@ -181,7 +181,7 @@ class P5GUI(tk.Toplevel):
             temp_dir = Path(self.temp_var.get()) if self.use_temp.get() else None
             logger.debug(f"実行パラメータ: missing_elev={missing}, temp_dir={temp_dir}")
             
-            out_path = run_p5(
+            out_path = run_lr_wse(
                 input_dir=in_dir,
                 config_file=cfg,
                 output_dir=out_dir,
@@ -215,5 +215,5 @@ if __name__ == "__main__":
     # Toplevel を生成するためにルートウィンドウを用意
     root = tk.Tk()
     root.withdraw()
-    app = P5GUI(root, in_dir, out_dir)
+    app = LrWseGUI(root, in_dir, out_dir)
     root.mainloop()

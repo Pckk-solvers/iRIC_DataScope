@@ -12,7 +12,7 @@ import logging
 if __name__ == "__main__" and __package__ is None:
     project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
     sys.path.insert(0, project_root)
-    __package__ = "iric_tools.time_series"
+    __package__ = "iRIC_DataScope.time_series"
 
 from iRIC_DataScope.common.logging_config import setup_logging
 from .gui_components import launch_time_series_gui

@@ -1,4 +1,4 @@
-# iric_tools/common/io_selector.py
+# iRIC_DataScope/common/io_selector.py
 """
 共通UIコンポーネント: 入力フォルダと出力フォルダを一組で選択するパネル
 """
