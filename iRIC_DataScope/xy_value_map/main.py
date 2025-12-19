@@ -19,6 +19,62 @@ from .processor import (
 logger = logging.getLogger(__name__)
 
 
+def export_xy_value_map_step(
+    *,
+    data_source: DataSource,
+    output_dir: Path,
+    step: int,
+    value_col: str,
+    roi: Roi,
+    min_color: str,
+    max_color: str,
+    vmin: float,
+    vmax: float,
+    dpi: int = 150,
+) -> Path:
+    """
+    指定した 1 ステップ分の X-Y 分布画像を出力する。
+    """
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    frame = data_source.get_frame(step=step, value_col=value_col)
+    x, y, v = frame_to_grids(frame, value_col=value_col)
+    grid = slice_grids_to_roi(x, y, v, roi=roi)
+    if grid is None:
+        raise ValueError("ROI 内に点がありません。")
+
+    vals = apply_mask_to_values(grid.v, grid.mask)
+    finite = vals[np.isfinite(vals)]
+    if finite.size == 0:
+        raise ValueError("ROI 内の Value が全て NaN/Inf です。")
+
+    cmap = build_colormap(min_color, max_color)
+
+    # ROI の縦横比に合わせて figsize を固定
+    x_span = max(roi.xmax - roi.xmin, 1e-12)
+    y_span = max(roi.ymax - roi.ymin, 1e-12)
+    base_w = 8.0
+    base_h = base_w * (y_span / x_span)
+    base_h = min(max(base_h, 3.5), 12.0)
+    figsize = (base_w, base_h)
+
+    from matplotlib.figure import Figure
+
+    fig = Figure(figsize=figsize, dpi=dpi, constrained_layout=True)
+    ax = fig.add_subplot(111)
+    m = ax.pcolormesh(grid.x, grid.y, vals, cmap=cmap, vmin=vmin, vmax=vmax, shading="gouraud")
+    fig.colorbar(m, ax=ax)
+    ax.set_title(f"step={frame.step}  t={frame.time:g}  value={value_col}")
+    ax.set_xlim(roi.xmin, roi.xmax)
+    ax.set_ylim(roi.ymin, roi.ymax)
+    ax.set_aspect("equal", adjustable="box")
+
+    digits = max(4, len(str(data_source.step_count)))
+    out_path = output_dir / f"step_{frame.step:0{digits}d}.png"
+    fig.savefig(out_path)
+    return out_path
+
+
 def export_xy_value_maps(
     *,
     data_source: DataSource,

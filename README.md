@@ -7,7 +7,7 @@ iRIC の計算結果を解析・抽出・可視化する GUI ツールです。
 - 横断断面の重ね合わせ
 - 左右岸最大水位の整理
 - ステップ別 X-Y 分布画像出力（Value をカラーマップ表示）
-- 入力が `.ipro` / `.cgn` の場合、従来3機能は内部で CSV に変換して処理を継続
+- 入力が **プロジェクトフォルダ / .ipro** の場合、従来3機能は内部で CSV に変換して処理を継続
 
 ## 必要環境
 - Python 3.13
@@ -48,7 +48,7 @@ https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b9607
 iRIC_DataScope/
 ├── iRIC_DataScope/          # メインパッケージ
 │   ├── app.py               # エントリポイント
-│   ├── common/              # 共通機能（CGNS/IPRO→CSV 変換含む）
+│   ├── common/              # 共通機能（プロジェクト→CSV 変換含む）
 │   ├── cross_section/       # 横断重ね合わせ
 │   ├── lr_wse/              # 左右岸最大水位整理
 │   ├── time_series/         # 時系列抽出

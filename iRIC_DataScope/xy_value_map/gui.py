@@ -10,7 +10,7 @@ from tkinter import colorchooser, messagebox, ttk
 
 import numpy as np
 
-from .main import export_xy_value_maps
+from .main import export_xy_value_map_step, export_xy_value_maps
 from .processor import (
     DataSource,
     Roi,
@@ -161,7 +161,12 @@ class XYValueMapGUI(tk.Toplevel):
         self._build_preview(preview_frame)
 
         # 実行
-        ttk.Button(self, text="実行（全ステップ出力）", command=self._run).grid(row=8, column=0, columnspan=6, pady=10)
+        btn_frame = ttk.Frame(self)
+        btn_frame.grid(row=8, column=0, columnspan=6, sticky="ew", padx=8, pady=10)
+        btn_frame.columnconfigure(0, weight=1)
+        btn_frame.columnconfigure(1, weight=1)
+        ttk.Button(btn_frame, text="このステップのみ出力", command=self._run_single_step).grid(row=0, column=0, sticky="ew", padx=(0, 6))
+        ttk.Button(btn_frame, text="実行（全ステップ出力）", command=self._run).grid(row=0, column=1, sticky="ew", padx=(6, 0))
 
         # layout
         self.grid_columnconfigure(1, weight=1)
@@ -562,6 +567,99 @@ class XYValueMapGUI(tk.Toplevel):
             progress.close()
 
         messagebox.showinfo("完了", f"画像を出力しました:\n{out_dir}")
+
+    def _run_single_step(self):
+        value_col = self.value_var.get().strip()
+        if not value_col:
+            messagebox.showerror("エラー", "Value（変数）を選択してください。")
+            return
+
+        try:
+            roi = self._get_roi()
+        except Exception as e:
+            messagebox.showerror("エラー", f"ROI が不正です:\n{e}")
+            return
+
+        step = int(self.step_var.get() or 1)
+        step = max(1, min(step, self._data_source.step_count))
+        self.step_var.set(step)
+
+        scale_mode = self.scale_mode.get()
+        if scale_mode == "manual":
+            try:
+                vmin = float(self.vmin_var.get())
+                vmax = float(self.vmax_var.get())
+            except Exception:
+                messagebox.showerror("エラー", "manual の場合は vmin/vmax を数値で入力してください。")
+                return
+            if vmin >= vmax:
+                messagebox.showerror("エラー", "vmin は vmax より小さい必要があります。")
+                return
+        else:
+            # global が計算済みならそれを使用。未計算の場合は暫定スケール（このステップのmin/max）で出力する。
+            if self._global_scale.vmin is not None and self._global_scale.vmax is not None:
+                vmin, vmax = self._global_scale.vmin, self._global_scale.vmax
+            else:
+                msg = (
+                    "global スケールがまだ計算されていないため、\n"
+                    "このステップの min/max（プレビューと同じ暫定スケール）で出力します。\n"
+                    "よろしいですか？"
+                )
+                if not messagebox.askyesno("確認", msg):
+                    return
+                try:
+                    frame = self._get_preview_frame(step, value_col)
+                    x, y, v = frame_to_grids(frame, value_col=value_col)
+                    grid = slice_grids_to_roi(x, y, v, roi=roi)
+                    if grid is None:
+                        messagebox.showerror("エラー", "ROI 内に点がありません。")
+                        return
+                    vals = apply_mask_to_values(grid.v, grid.mask)
+                    finite = vals[np.isfinite(vals)]
+                    if finite.size == 0:
+                        messagebox.showerror("エラー", "ROI 内の Value が全て NaN/Inf です。")
+                        return
+                    vmin = float(finite.min())
+                    vmax = float(finite.max())
+                    if vmin == vmax:
+                        vmax = vmin + 1e-12
+                except Exception as e:
+                    messagebox.showerror("エラー", f"スケール計算に失敗しました:\n{e}")
+                    return
+
+        try:
+            min_color = parse_color(self.min_color_var.get())
+            max_color = parse_color(self.max_color_var.get())
+        except Exception as e:
+            messagebox.showerror("エラー", f"色の指定が不正です:\n{e}")
+            return
+
+        out_base = Path(self.output_var.get())
+        out_dir = out_base / f"xy_value_map_{value_col}"
+
+        progress = _ProgressWindow(self, title="出力中", maximum=1)
+        progress.update(current=0, total=1, text=f"出力中: step={step}")
+        try:
+            out_path = export_xy_value_map_step(
+                data_source=self._data_source,
+                output_dir=out_dir,
+                step=step,
+                value_col=value_col,
+                roi=roi,
+                min_color=min_color,
+                max_color=max_color,
+                vmin=vmin,
+                vmax=vmax,
+            )
+        except Exception as e:
+            logger.exception("このステップのみ出力に失敗しました")
+            progress.close()
+            messagebox.showerror("エラー", f"画像出力に失敗しました:\n{e}")
+            return
+        finally:
+            progress.close()
+
+        messagebox.showinfo("完了", f"画像を出力しました:\n{out_path}")
 
 
 class _ProgressWindow:

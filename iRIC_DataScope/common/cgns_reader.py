@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import re
 import shutil
 import tempfile
 import zipfile
@@ -125,7 +126,15 @@ def _load_flow_solutions(
     f: h5py.File, zone_path: str
 ) -> tuple[list[str], list[str | None], set[str]]:
     pointers_path = f"{zone_path}/ZoneIterativeData/FlowSolutionPointers"
-    pointers = _decode_flow_solution_pointers_int8(_read_node_data(f, pointers_path))
+    pointers: list[str] = []
+    if pointers_path in f:
+        try:
+            pointers = _decode_flow_solution_pointers_int8(_read_node_data(f, pointers_path))
+        except Exception as e:
+            logger.debug("Failed to read FlowSolutionPointers: %s", e)
+
+    if not pointers:
+        pointers = _list_flow_solution_groups(f, zone_path)
 
     locations: list[str | None] = []
     location_set: set[str] = set()
@@ -138,6 +147,26 @@ def _load_flow_solutions(
             location_set.add(norm)
 
     return pointers, locations, location_set
+
+
+def _list_flow_solution_groups(f: h5py.File, zone_path: str) -> list[str]:
+    if zone_path not in f:
+        return []
+    zone = f[zone_path]
+    names: list[str] = []
+    for name, obj in zone.items():
+        if isinstance(obj, h5py.Group) and name.lower().startswith("flowsolution"):
+            names.append(name)
+    if not names:
+        return []
+
+    def sort_key(n: str):
+        m = re.search(r"(\d+)$", n)
+        if m:
+            return (0, int(m.group(1)))
+        return (1, n.lower())
+
+    return sorted(names, key=sort_key)
 
 
 def _pick_preferred_location(
@@ -269,7 +298,7 @@ def iter_iric_step_frames(
 
             nstep = len(sol_names)
             if nstep < 1:
-                raise RuntimeError("No FlowSolutionPointers found")
+                raise RuntimeError("No FlowSolution found")
 
             first_sol_path = f"{zone_path}/{sol_names[0]}"
             if first_sol_path not in f:
@@ -345,4 +374,3 @@ def iter_iric_step_frames_from_input(
     """入力(.cgn/.ipro/dir)から CGNS を解決して iter_iric_step_frames を返す。"""
     with resolve_case_cgn(input_path, case_name) as cgn:
         yield from iter_iric_step_frames(cgn, **kwargs)
-
