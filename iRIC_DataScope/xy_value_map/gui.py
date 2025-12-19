@@ -52,6 +52,8 @@ class XYValueMapGUI(tk.Toplevel):
 
         self._global_scale = _GlobalScaleState()
         self._preview_frame_cache: dict[tuple[int, str], object] = {}
+        self._base_dx = 1.0
+        self._base_dy = 1.0
 
         self._data_source = DataSource.from_input(input_path)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
@@ -159,16 +161,19 @@ class XYValueMapGUI(tk.Toplevel):
         self.rotation_entry = ttk.Entry(self, textvariable=self.rotation_var, width=10)
         self.rotation_entry.grid(row=6, column=1, sticky="w", **pad)
 
-        ttk.Label(self, text="dx:").grid(row=6, column=2, sticky="e", **pad)
-        self.dx_var = tk.DoubleVar()
-        self.dy_var = tk.DoubleVar()
-        self.dx_entry = ttk.Entry(self, textvariable=self.dx_var, width=10)
-        self.dy_entry = ttk.Entry(self, textvariable=self.dy_var, width=10)
-        self.dx_entry.grid(row=6, column=3, sticky="w", **pad)
-        ttk.Label(self, text="dy:").grid(row=6, column=4, sticky="e", **pad)
-        self.dy_entry.grid(row=6, column=5, sticky="w", **pad)
+        ttk.Label(self, text="解像度倍率:").grid(row=6, column=2, sticky="e", **pad)
+        self.resolution_var = tk.DoubleVar(value=1.0)
+        self.resolution_spin = tk.Spinbox(
+            self,
+            from_=0.5,
+            to=8.0,
+            increment=0.5,
+            textvariable=self.resolution_var,
+            width=8,
+        )
+        self.resolution_spin.grid(row=6, column=3, sticky="w", **pad)
 
-        for var in (self.rotation_var, self.dx_var, self.dy_var):
+        for var in (self.rotation_var, self.resolution_var):
             var.trace_add("write", lambda *_: self._on_rotation_or_resolution_changed())
 
         # ステータス
@@ -245,11 +250,10 @@ class XYValueMapGUI(tk.Toplevel):
         try:
             frame0 = self._data_source.get_frame(step=1, value_col=self.value_var.get())
             x0, y0, _ = frame_to_grids(frame0, value_col=self.value_var.get())
-            dx, dy = estimate_grid_spacing(x0, y0)
+            self._base_dx, self._base_dy = estimate_grid_spacing(x0, y0)
         except Exception:
-            dx, dy = 1.0, 1.0
-        self.dx_var.set(dx)
-        self.dy_var.set(dy)
+            self._base_dx, self._base_dy = 1.0, 1.0
+        self.resolution_var.set(1.0)
 
         self._on_scale_mode_changed()
         self._schedule_preview_update(immediate=True)
@@ -325,10 +329,13 @@ class XYValueMapGUI(tk.Toplevel):
 
     def _get_rotation_and_resolution(self) -> tuple[float, float, float]:
         rotation = float(self.rotation_var.get() or 0.0)
-        dx = float(self.dx_var.get())
-        dy = float(self.dy_var.get())
+        scale = float(self.resolution_var.get() or 1.0)
+        if scale <= 0:
+            raise ValueError("解像度倍率は正の値である必要があります。")
+        dx = self._base_dx / scale
+        dy = self._base_dy / scale
         if dx <= 0 or dy <= 0:
-            raise ValueError("dx/dy は正の値である必要があります。")
+            raise ValueError("解像度設定が不正です。")
         return rotation, dx, dy
 
     def _schedule_preview_update(self, immediate: bool = False):
@@ -435,10 +442,14 @@ class XYValueMapGUI(tk.Toplevel):
             scale = math.sqrt(est_points / preview_max)
             dx_p = dx * scale
             dy_p = dy * scale
-            self.status_var.set(f"プレビュー軽量化のため dx/dy を {dx_p:.4g}/{dy_p:.4g} に調整しました")
+            scale_preview = (self._base_dx / dx_p) if dx_p > 0 else 0.0
+            if scale_preview > 0:
+                self.status_var.set(f"プレビュー軽量化のため解像度倍率を {scale_preview:.3g} に調整しました")
+            else:
+                self.status_var.set("プレビュー軽量化のため解像度を調整しました")
 
         try:
-            out_x, out_y, vals_resampled = prepare_rotated_grid_from_grid(
+            out_x, out_y, vals_resampled, mask = prepare_rotated_grid_from_grid(
                 grid,
                 roi=roi,
                 rotation_deg=rotation_deg,
@@ -453,7 +464,7 @@ class XYValueMapGUI(tk.Toplevel):
         cmap = build_colormap(self.min_color_var.get(), self.max_color_var.get())
         scale = self._get_scale()
         if scale is None:
-            finite = vals_resampled[np.isfinite(vals_resampled)]
+            finite = vals_resampled[np.isfinite(vals_resampled) & mask]
             if finite.size:
                 vmin, vmax = float(finite.min()), float(finite.max())
                 self.status_var.set("globalスケール計算中（暫定表示）" if self.scale_mode.get() == "global" else "")
@@ -515,6 +526,15 @@ class XYValueMapGUI(tk.Toplevel):
                 pass
             self.mesh = None
         self.mesh = self.ax.pcolormesh(x, y, vals, cmap=cmap, vmin=vmin, vmax=vmax, shading="gouraud")
+        from matplotlib.patches import Rectangle
+
+        clip_rect = Rectangle(
+            (roi.xmin, roi.ymin),
+            roi.xmax - roi.xmin,
+            roi.ymax - roi.ymin,
+            transform=self.ax.transData,
+        )
+        self.mesh.set_clip_path(clip_rect)
         if self.cbar is None:
             self.cbar = self.fig.colorbar(self.mesh, ax=self.ax)
         else:
@@ -710,14 +730,14 @@ class XYValueMapGUI(tk.Toplevel):
                     if grid is None:
                         messagebox.showerror("エラー", "ROI 内に点がありません。")
                         return
-                    _, _, vals = prepare_rotated_grid_from_grid(
+                    _, _, vals, mask = prepare_rotated_grid_from_grid(
                         grid,
                         roi=roi,
                         rotation_deg=rotation_deg,
                         dx=dx,
                         dy=dy,
                     )
-                    finite = vals[np.isfinite(vals)]
+                    finite = vals[np.isfinite(vals) & mask]
                     if finite.size == 0:
                         messagebox.showerror("エラー", "ROI 内の Value が全て NaN/Inf です。")
                         return

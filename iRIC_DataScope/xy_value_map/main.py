@@ -55,8 +55,8 @@ def export_xy_value_map_step(
     if prepared is None:
         raise ValueError("ROI 内に点がありません。")
 
-    out_x, out_y, vals = prepared
-    finite = vals[np.isfinite(vals)]
+    out_x, out_y, vals, mask = prepared
+    finite = vals[np.isfinite(vals) & mask]
     if finite.size == 0:
         raise ValueError("ROI 内の Value が全て NaN/Inf です。")
 
@@ -75,6 +75,15 @@ def export_xy_value_map_step(
     fig = Figure(figsize=figsize, dpi=dpi, constrained_layout=True)
     ax = fig.add_subplot(111)
     m = ax.pcolormesh(out_x, out_y, vals, cmap=cmap, vmin=vmin, vmax=vmax, shading="gouraud")
+    from matplotlib.patches import Rectangle
+
+    clip_rect = Rectangle(
+        (roi.xmin, roi.ymin),
+        roi.xmax - roi.xmin,
+        roi.ymax - roi.ymin,
+        transform=ax.transData,
+    )
+    m.set_clip_path(clip_rect)
     fig.colorbar(m, ax=ax)
     ax.set_title(f"step={frame.step}  t={frame.time:g}  value={value_col}")
     ax.set_xlim(roi.xmin, roi.xmax)
@@ -160,11 +169,11 @@ def export_xy_value_maps(
             if prepared is None:
                 logger.info("Skip step=%s: ROI内に点がありません", frame.step)
                 continue
-            out_x, out_y, vals = prepared
+            out_x, out_y, vals, mask = prepared
         except Exception:
             logger.exception("Skip step=%s: 描画用データ準備に失敗", frame.step)
             continue
-        finite = vals[np.isfinite(vals)]
+        finite = vals[np.isfinite(vals) & mask]
         if finite.size == 0:
             logger.info("Skip step=%s: ROI内のValueが全てNaN/Infです", frame.step)
             continue
@@ -172,6 +181,15 @@ def export_xy_value_maps(
         fig = Figure(figsize=figsize, dpi=dpi, constrained_layout=True)
         ax = fig.add_subplot(111)
         m = ax.pcolormesh(out_x, out_y, vals, cmap=cmap, vmin=vmin, vmax=vmax, shading="gouraud")
+        from matplotlib.patches import Rectangle
+
+        clip_rect = Rectangle(
+            (roi.xmin, roi.ymin),
+            roi.xmax - roi.xmin,
+            roi.ymax - roi.ymin,
+            transform=ax.transData,
+        )
+        m.set_clip_path(clip_rect)
         fig.colorbar(m, ax=ax)
         ax.set_title(f"step={frame.step}  t={frame.time:g}  value={value_col}")
         ax.set_xlim(roi.xmin, roi.xmax)

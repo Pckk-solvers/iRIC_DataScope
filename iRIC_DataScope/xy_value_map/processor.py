@@ -244,14 +244,13 @@ def prepare_rotated_grid_from_grid(
     rotation_deg: float,
     dx: float,
     dy: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     grid = resample_grid_ij(grid, dx=dx, dy=dy)
     center = ((roi.xmin + roi.xmax) / 2.0, (roi.ymin + roi.ymax) / 2.0)
     x_rot, y_rot = rotate_xy(grid.x, grid.y, center=center, angle_deg=rotation_deg)
     mask = (roi.xmin <= x_rot) & (x_rot <= roi.xmax) & (roi.ymin <= y_rot) & (y_rot <= roi.ymax)
     vals = np.asarray(grid.v, dtype=float)
-    vals[~mask] = np.nan
-    return x_rot, y_rot, vals
+    return x_rot, y_rot, vals, mask
 
 
 def prepare_rotated_grid(
@@ -263,7 +262,7 @@ def prepare_rotated_grid(
     rotation_deg: float,
     dx: float,
     dy: float,
-) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray] | None:
     center = ((roi.xmin + roi.xmax) / 2.0, (roi.ymin + roi.ymax) / 2.0)
     bounds = compute_rotated_roi_bounds(roi, rotation_deg=rotation_deg, center=center)
     grid = slice_grids_to_roi(x, y, v, roi=bounds)
@@ -322,7 +321,7 @@ def compute_global_value_range_rotated(
             grid = slice_grids_to_roi(x, y, v, roi=bounds)
             if grid is None:
                 continue
-            _, _, vals = prepare_rotated_grid_from_grid(
+            _, _, vals, mask = prepare_rotated_grid_from_grid(
                 grid,
                 roi=roi,
                 rotation_deg=rotation_deg,
@@ -333,7 +332,7 @@ def compute_global_value_range_rotated(
             logger.exception("globalスケール計算に失敗: step=%s", frame.step)
             continue
 
-        finite = vals[np.isfinite(vals)]
+        finite = vals[np.isfinite(vals) & mask]
         if finite.size == 0:
             continue
         found = True
