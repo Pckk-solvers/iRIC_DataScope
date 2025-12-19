@@ -8,7 +8,6 @@ import sys
 import logging
 from pathlib import Path
 import tkinter as tk
-from tkinter import messagebox
 import webbrowser
 
 # スクリプト単体実行時にパッケージを認識させる
@@ -23,7 +22,6 @@ logger = logging.getLogger(__name__)
 
 # GUI コンポーネントの読み込み
 from iRIC_DataScope.common.io_selector import IOFolderSelector
-from iRIC_DataScope.common.cgns_converter import ConversionOptions, convert_iric_project
 from iRIC_DataScope.common.iric_project import classify_input_dir
 from iRIC_DataScope.lr_wse.gui import LrWseGUI
 from iRIC_DataScope.cross_section.gui import ProfilePlotGUI
@@ -153,111 +151,16 @@ class LauncherApp(tk.Tk):
             btn.configure(state=state)
         logger.debug(f"LauncherApp: Validation result: input='{in_dir}', output='{out_dir}', buttons_enabled={ok}")
 
-    def _show_progress(self, text: str) -> tk.Toplevel:
-        """簡易プログレス表示用の小ウィンドウを出す"""
-        win = tk.Toplevel(self)
-        win.title("変換中")
-        win.transient(self)
-        win.resizable(False, False)
-        tk.Label(win, text=text, padx=20, pady=15).pack()
-        win.update_idletasks()
-        self.update_idletasks()
-        return win
-
-    def _prepare_input_for_tool(self) -> Path | None:
-        """
-        入力がプロジェクトフォルダの場合は CSV 変換して変換先フォルダを返す。
-        既存CSVがある場合は上書き確認を出し、キャンセルなら再利用。
-        エラー時は None。
-        """
-        in_path = self.io_panel.get_input_dir()
-        out_dir = self.io_panel.get_output_dir()
-
-        if in_path.is_file():
-            if in_path.suffix.lower() != ".ipro":
-                messagebox.showerror(
-                    "入力エラー",
-                    "入力にはプロジェクトフォルダ、CSVフォルダ、または .ipro を指定してください。",
-                )
-                return None
-            input_kind = "ipro"
-            conv_dir = out_dir / f"converted_{in_path.stem}"
-        else:
-            try:
-                kind = classify_input_dir(in_path)
-            except Exception as exc:
-                logger.exception("入力フォルダの判定に失敗しました")
-                messagebox.showerror("入力エラー", str(exc))
-                return None
-            if kind == "csv_dir":
-                return in_path
-            input_kind = "project_dir"
-            conv_dir = out_dir / f"converted_{in_path.name}"
-
-        conv_dir.mkdir(parents=True, exist_ok=True)
-
-        existing_csv = list(conv_dir.glob("*.csv"))
-        if existing_csv:
-            overwrite = messagebox.askyesno(
-                "確認",
-                f"{conv_dir} に既存の CSV が見つかりました。\n"
-                "上書きして再変換しますか？\n"
-                "（いいえ を選ぶと既存CSVを再利用します）"
-            )
-            if not overwrite:
-                # 再利用するのでパスだけ返す
-                self.io_panel.input_selector.var.set(str(conv_dir))
-                return conv_dir
-
-        progress = None
-        try:
-            if input_kind == "ipro":
-                progress = self._show_progress("ipro を展開して CSV へ変換中です...")
-            else:
-                progress = self._show_progress("プロジェクトフォルダから CSV へ変換中です...")
-            # すぐに描画する
-            if progress:
-                progress.update()
-                self.update()
-
-            convert_iric_project(
-                in_path,
-                conv_dir,
-                options=ConversionOptions(
-                    include_flow_solution=True,
-                    location_preference="auto",
-                ),
-            )
-            # 先にプログレスを閉じてから完了ダイアログ
-            if progress and progress.winfo_exists():
-                progress.destroy()
-                progress = None
-            self.io_panel.input_selector.var.set(str(conv_dir))
-            messagebox.showinfo("変換完了", f"CSV 変換が完了しました。\n出力先: {conv_dir}")
-            return conv_dir
-        except Exception:
-            logger.exception("CSV 変換に失敗しました")
-            if progress and progress.winfo_exists():
-                progress.destroy()
-                progress = None
-            messagebox.showerror(
-                "変換エラー",
-                "CSV 変換に失敗しました。詳細はログを確認してください。"
-            )
-            return None
-
     def open_lr_wse(self):
         """左右岸水位抽出ツールを開く"""
         out_dir = self.io_panel.get_output_dir()
-        in_dir = self._prepare_input_for_tool()
-        if not in_dir:
-            return
-        logger.info(f"LauncherApp: Opening LrWseGUI (in_dir={in_dir}, out_dir={out_dir})")
+        in_path = self.io_panel.get_input_dir()
+        logger.info(f"LauncherApp: Opening LrWseGUI (in_path={in_path}, out_dir={out_dir})")
         if self._lr_wse_win and self._lr_wse_win.winfo_exists():
             logger.debug("LauncherApp: LrWseGUI already open, lifting window")
             self._lr_wse_win.lift()
             return
-        self._lr_wse_win = LrWseGUI(self, in_dir, out_dir)
+        self._lr_wse_win = LrWseGUI(self, in_path, out_dir)
         self._lr_wse_win.protocol("WM_DELETE_WINDOW", self._on_close_lr_wse)
         logger.debug("LauncherApp: LrWseGUI window created")
 
@@ -271,15 +174,13 @@ class LauncherApp(tk.Tk):
     def open_cross_section(self):
         """横断重ね合わせ図作成ツールを開く"""
         out_dir = self.io_panel.get_output_dir()
-        in_dir = self._prepare_input_for_tool()
-        if not in_dir:
-            return
-        logger.info(f"LauncherApp: Opening ProfilePlotGUI (in_dir={in_dir}, out_dir={out_dir})")
+        in_path = self.io_panel.get_input_dir()
+        logger.info(f"LauncherApp: Opening ProfilePlotGUI (in_path={in_path}, out_dir={out_dir})")
         if self._cross_section_win and self._cross_section_win.winfo_exists():
             logger.debug("LauncherApp: ProfilePlotGUI already open, lifting window")
             self._cross_section_win.lift()
             return
-        self._cross_section_win = ProfilePlotGUI(self, in_dir, out_dir)
+        self._cross_section_win = ProfilePlotGUI(self, in_path, out_dir)
         self._cross_section_win.protocol("WM_DELETE_WINDOW", self._on_close_cross_section)
         logger.debug("LauncherApp: ProfilePlotGUI window created")
 
@@ -293,17 +194,15 @@ class LauncherApp(tk.Tk):
     def open_time_series(self):
         """時系列抽出ツール GUI を起動"""
         out_dir = self.io_panel.get_output_dir()
-        in_dir = self._prepare_input_for_tool()
-        if not in_dir:
-            return
-        logger.info(f"LauncherApp: Opening TimeSeriesGUI (in_dir={in_dir}, out_dir={out_dir})")
+        in_path = self.io_panel.get_input_dir()
+        logger.info(f"LauncherApp: Opening TimeSeriesGUI (in_path={in_path}, out_dir={out_dir})")
         if self._time_series_win and self._time_series_win.winfo_exists():
             logger.debug("LauncherApp: TimeSeriesGUI already open, lifting window")
             self._time_series_win.lift()
             return
         self._time_series_win = TimeSeriesGUI(
             master=self,
-            initial_input_dir=in_dir,
+            initial_input_dir=in_path,
             initial_output_dir=out_dir,
         )
         self._time_series_win.protocol("WM_DELETE_WINDOW", self._on_close_time_series)

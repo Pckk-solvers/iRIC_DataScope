@@ -29,7 +29,7 @@ def run_plot_profile(
     """
     # 1) データ読み込み
     grouped = load_profile_data(
-        input_dir=input_dir,
+        input_path=input_dir,
         mode=mode,
         selected_file=selected_file,
         include_ids=include_ids

@@ -4,11 +4,15 @@ from pathlib import Path
 from typing import Optional, List, Dict, Tuple
 import pandas as pd
 import numpy as np
-from iRIC_DataScope.common.csv_reader import list_csv_files, read_iric_csv
 
-def _read_and_prepare(file_path: Path) -> Tuple[float, pd.DataFrame]:
+from iRIC_DataScope.common.csv_reader import list_csv_files, read_iric_csv
+from iRIC_DataScope.common.iric_data_source import DataSource
+from iRIC_DataScope.common.iric_project import classify_input_dir
+
+
+def _prepare_frame(time_val: float, df: pd.DataFrame) -> Tuple[float, pd.DataFrame]:
     """
-    ファイルから時刻 t を読み取り、必要な列のみ選択して返す。
+    時刻 t と DataFrame から必要な列のみ選択して返す。
     累積距離の計算は含まない。
 
     Returns:
@@ -19,10 +23,7 @@ def _read_and_prepare(file_path: Path) -> Tuple[float, pd.DataFrame]:
           "Elevation", "WaterSurface"
       ])
     """
-    # 1) 共通モジュールで時刻とヘッダー付きデータを取得
-    t, df = read_iric_csv(str(file_path))
-
-    # 2) 必要な列のみ抽出
+    # 必要な列のみ抽出
     cols = ["I", "J", "X", "Y", "elevation(m)", "watersurfaceelevation(m)"]
     df = df.loc[:, cols].copy()
 
@@ -37,13 +38,22 @@ def _read_and_prepare(file_path: Path) -> Tuple[float, pd.DataFrame]:
     }, inplace=True)
 
     # 4) 時刻列を先頭に追加
-    df.insert(0, "Time", t)
+    df.insert(0, "Time", time_val)
 
-    return t, df
+    return time_val, df
+
+
+def _read_and_prepare(file_path: Path) -> Tuple[float, pd.DataFrame]:
+    """
+    ファイルから時刻 t を読み取り、必要な列のみ選択して返す。
+    累積距離の計算は含まない。
+    """
+    t, df = read_iric_csv(str(file_path))
+    return _prepare_frame(t, df)
 
 
 def load_profile_data(
-    input_dir: Path,
+    input_path: Path,
     mode: str = "single",
     selected_file: Optional[Path] = None,
     include_ids: Optional[List[float]] = None
@@ -59,41 +69,69 @@ def load_profile_data(
         ...
       }
     """
-    # 対象ファイル一覧取得
-    if mode == "single":
-        if selected_file:
-            files = [selected_file]
-        else:
-            files = list_csv_files(str(input_dir))[:1]
-    else:
-        files = list_csv_files(str(input_dir))
-
     result: Dict[float, Dict[float, pd.DataFrame]] = {}
 
-    for fp in files:
-        fp_path = Path(fp)
-        try:
-            t, df = _read_and_prepare(fp_path)
-        except Exception as e:
-            print(f"⚠ {fp_path.name} の読み込み失敗: {e}")
-            continue
+    if selected_file and selected_file.exists():
+        files = [selected_file]
+    elif input_path.is_dir() and classify_input_dir(input_path) == "csv_dir":
+        if mode == "single":
+            files = list_csv_files(str(input_path))[:1]
+        else:
+            files = list_csv_files(str(input_path))
+    else:
+        files = []
 
-        # Profile_IDごとに累積距離を計算
-        for pid, grp in df.groupby("Profile_ID", dropna=False):
-            if include_ids and pid not in include_ids:
+    if files:
+        for fp in files:
+            fp_path = Path(fp)
+            try:
+                t, df = _read_and_prepare(fp_path)
+            except Exception as e:
+                print(f"? {fp_path.name} の読み込み失敗: {e}")
                 continue
+            _group_profile(result, t, df, include_ids)
+        return result
 
-            # ソートして隣接点間距離を計算
-            sub = grp.sort_values("Sort_Key").reset_index(drop=True)
-            dx = sub["X_Coordinate"].diff().fillna(0)
-            dy = sub["Y_Coordinate"].diff().fillna(0)
-
-            # 累積距離を計算し、小数第2位までに丸め
-            cum = np.sqrt(dx*dx + dy*dy).cumsum()
-            sub["Cumulative_Distance"] = np.round(cum, 2)
-
-            # 必要列を抽出
-            mini = sub[["Time", "Cumulative_Distance", "Elevation", "WaterSurface"]].copy()
-            result.setdefault(pid, {})[t] = mini
+    data_source = DataSource.from_input(input_path)
+    try:
+        frames = data_source.iter_frames_with_columns(
+            value_cols=["elevation(m)", "watersurfaceelevation(m)"]
+        )
+        if mode == "single":
+            frames = list(frames)[:1]
+        for frame in frames:
+            try:
+                t, df = _prepare_frame(frame.time, frame.df)
+            except Exception as e:
+                print(f"? step={frame.step} の読み込み失敗: {e}")
+                continue
+            _group_profile(result, t, df, include_ids)
+    finally:
+        data_source.close()
 
     return result
+
+
+def _group_profile(
+    result: Dict[float, Dict[float, pd.DataFrame]],
+    t: float,
+    df: pd.DataFrame,
+    include_ids: Optional[List[float]],
+) -> None:
+    # Profile_IDごとに累積距離を計算
+    for pid, grp in df.groupby("Profile_ID", dropna=False):
+        if include_ids and pid not in include_ids:
+            continue
+
+        # ソートして隣接点間距離を計算
+        sub = grp.sort_values("Sort_Key").reset_index(drop=True)
+        dx = sub["X_Coordinate"].diff().fillna(0)
+        dy = sub["Y_Coordinate"].diff().fillna(0)
+
+        # 累積距離を計算し、小数第2位までに丸め
+        cum = np.sqrt(dx*dx + dy*dy).cumsum()
+        sub["Cumulative_Distance"] = np.round(cum, 2)
+
+        # 必要列を抽出
+        mini = sub[["Time", "Cumulative_Distance", "Elevation", "WaterSurface"]].copy()
+        result.setdefault(pid, {})[t] = mini

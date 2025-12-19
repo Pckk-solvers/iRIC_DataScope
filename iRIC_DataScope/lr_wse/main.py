@@ -14,8 +14,12 @@ import sys
 from tempfile import TemporaryDirectory
 from typing import Optional, Union
 
+import pandas as pd
+
+from iRIC_DataScope.common.iric_data_source import DataSource
+from iRIC_DataScope.common.iric_project import classify_input_dir
 from .config import load_setting
-from .extractor import extract_all
+from .extractor import extract_all, extract_all_from_frames
 from .writer import combine_to_excel
 
 # ロガー設定
@@ -23,7 +27,7 @@ logger = logging.getLogger(__name__)
 
 
 def run_lr_wse(
-    input_dir: Path,
+    input_path: Path,
     config_file: Path,
     output_dir: Path,
     excel_filename: str = "summary.xlsx",
@@ -32,7 +36,7 @@ def run_lr_wse(
 ) -> Path:
     """
     iRIC 左右岸最大水位整理の共通処理。
-    - input_dir: iRIC出力CSVがあるフォルダ
+    - input_path: プロジェクトフォルダ / CSVフォルダ / .ipro
     - config_file: 設定CSVファイルのパス
     - output_dir: Excel出力先フォルダ
     - excel_filename: 出力ファイル名
@@ -43,7 +47,7 @@ def run_lr_wse(
         Path: 出力したExcelファイルのパス
     """
     logger.info("処理開始")
-    logger.debug(f"パラメータ: input_dir={input_dir}, config_file={config_file}, output_dir={output_dir}, "
+    logger.debug(f"パラメータ: input_path={input_path}, config_file={config_file}, output_dir={output_dir}, "
                  f"excel_filename={excel_filename}, missing_elev={missing_elev}, temp_dir={temp_dir}")
     
     # 設定読み込み
@@ -56,13 +60,13 @@ def run_lr_wse(
         logger.info("中間CSV出力開始 (指定ディレクトリ)")
         temp_dir.mkdir(parents=True, exist_ok=True)
         td = temp_dir
-        extract_all(input_dir=input_dir, setting_df=setting_df, temp_dir=td)
+        _extract_input_to_temp(input_path=input_path, setting_df=setting_df, temp_dir=td)
         logger.info("中間CSV出力完了")
     else:
         logger.info("中間CSV出力開始 (一時ディレクトリ)")
         with TemporaryDirectory() as td_path:
             td = Path(td_path)
-            extract_all(input_dir=input_dir, setting_df=setting_df, temp_dir=td)
+            _extract_input_to_temp(input_path=input_path, setting_df=setting_df, temp_dir=td)
             logger.info("中間CSV出力完了")
             logger.info("Excel結合開始")
             result = combine_to_excel(
@@ -84,6 +88,40 @@ def run_lr_wse(
     return result
 
 
+def _extract_input_to_temp(
+    *,
+    input_path: Path,
+    setting_df: pd.DataFrame,
+    temp_dir: Path,
+) -> None:
+    if input_path.is_file():
+        if input_path.suffix.lower() != ".ipro":
+            raise ValueError("入力にはプロジェクトフォルダ、CSVフォルダ、または .ipro を指定してください。")
+        data_source = DataSource.from_input(input_path)
+        try:
+            frames = data_source.iter_frames_with_columns(
+                value_cols=["watersurfaceelevation(m)", "elevation(m)"]
+            )
+            extract_all_from_frames(frames, setting_df=setting_df, temp_dir=temp_dir)
+        finally:
+            data_source.close()
+        return
+
+    kind = classify_input_dir(input_path)
+    if kind == "csv_dir":
+        extract_all(input_dir=input_path, setting_df=setting_df, temp_dir=temp_dir)
+        return
+
+    data_source = DataSource.from_input(input_path)
+    try:
+        frames = data_source.iter_frames_with_columns(
+            value_cols=["watersurfaceelevation(m)", "elevation(m)"]
+        )
+        extract_all_from_frames(frames, setting_df=setting_df, temp_dir=temp_dir)
+    finally:
+        data_source.close()
+
+
 def main():
     logger.info("CLI実行開始")
     parser = argparse.ArgumentParser(
@@ -93,7 +131,7 @@ def main():
         "-i", "--input-dir",
         type=Path,
         required=True,
-        help="iRIC出力CSV(Result_*.csv)が格納されたフォルダ"
+        help="プロジェクトフォルダ / CSVフォルダ / .ipro"
     )
     parser.add_argument(
         "-f", "--config-file",
@@ -123,9 +161,11 @@ def main():
     logger.debug(f"CLI引数: {args}")
 
     # 存在チェック
-    if not args.input_dir.is_dir():
-        logger.error(f"入力フォルダが無効: {args.input_dir}")
-        print(f"エラー: 入力フォルダが存在しないかディレクトリではありません: {args.input_dir}")
+    in_path = args.input_dir
+    in_ok = in_path.is_dir() or (in_path.is_file() and in_path.suffix.lower() == ".ipro")
+    if not in_ok:
+        logger.error(f"入力パスが無効: {in_path}")
+        print(f"エラー: 入力が無効です（プロジェクトフォルダ/CSVフォルダ/.ipro）: {in_path}")
         sys.exit(1)
     if not args.config_file.is_file():
         logger.error(f"設定ファイルが無効: {args.config_file}")
@@ -139,7 +179,7 @@ def main():
     try:
         logger.info("処理開始")
         out_path = run_lr_wse(
-            input_dir=args.input_dir,
+            input_path=in_path,
             config_file=args.config_file,
             output_dir=args.output_dir,
             excel_filename=args.excel_name,

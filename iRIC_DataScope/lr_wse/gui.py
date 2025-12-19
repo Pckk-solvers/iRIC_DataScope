@@ -172,9 +172,13 @@ class LrWseGUI(tk.Toplevel):
             cfg = self.config_file
             logger.debug(f"入力フォルダ: {in_dir}, 出力フォルダ: {out_dir}, 設定ファイル: {cfg}")
             
-            if not (in_dir.is_dir() and out_dir.is_dir() and cfg and cfg.is_file()):
+            in_ok = in_dir.is_dir() or (in_dir.is_file() and in_dir.suffix.lower() == ".ipro")
+            if not (in_ok and out_dir.is_dir() and cfg and cfg.is_file()):
                 logger.error("入力フォルダ、設定ファイル、出力フォルダのいずれかが無効です")
-                messagebox.showerror("エラー", "入力フォルダ、設定ファイル、出力フォルダを正しく指定してください。")
+                messagebox.showerror(
+                    "エラー",
+                    "入力（プロジェクトフォルダ/CSVフォルダ/.ipro）、設定ファイル、出力フォルダを正しく指定してください。",
+                )
                 return
             
             missing = None if self.missing_var.get() == "" else self.missing_var.get()
@@ -182,7 +186,7 @@ class LrWseGUI(tk.Toplevel):
             logger.debug(f"実行パラメータ: missing_elev={missing}, temp_dir={temp_dir}")
             
             out_path = run_lr_wse(
-                input_dir=in_dir,
+                input_path=in_dir,
                 config_file=cfg,
                 output_dir=out_dir,
                 excel_filename=self.filename_var.get(),

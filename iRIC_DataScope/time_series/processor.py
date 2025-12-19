@@ -1,33 +1,29 @@
 # iRIC_DataScope\time_series\processor.py
 
 import logging
+from pathlib import Path
 from typing import List, Tuple, Dict
 import pandas as pd
 from iRIC_DataScope.common.csv_reader import list_csv_files, read_iric_csv
+from iRIC_DataScope.common.iric_data_source import DataSource
+from iRIC_DataScope.common.iric_project import classify_input_dir
 
 # ロガー取得
 logger = logging.getLogger(__name__)
 
 
-def extract_records(
-    csv_path: str,
+def extract_records_from_df(
+    df: pd.DataFrame,
+    time_val: float,
     grid_points: List[Tuple[int, int]],
-    variables: List[str]
+    variables: List[str],
+    source_label: str = ""
 ) -> List[Dict]:
     """
-    単一の CSV ファイルから、指定した格子点と変数の時刻データを抽出する
-
-    Args:
-        csv_path (str): 読み込む CSV ファイルのパス
-        grid_points (List[Tuple[int,int]]): 抽出対象の格子点 (i, j) のリスト
-        variables (List[str]): 抽出対象の変数名リスト
-
-    Returns:
-        List[Dict]: 各格子点の時間・I・J・各変数をキーとする辞書のリスト
+    DataFrame から、指定した格子点と変数の時刻データを抽出する。
     """
-    # CSV 読み込みと時刻抽出
-    time_val, df = read_iric_csv(csv_path)
-    logger.debug(f"読み込んだ CSV: {csv_path} (time={time_val})")
+    if source_label:
+        logger.debug(f"読み込んだデータ: {source_label} (time={time_val})")
 
     # 必須カラム確認
     required_cols = {'I', 'J'}
@@ -40,46 +36,92 @@ def extract_records(
     for i_val, j_val in grid_points:
         sub = df[(df['I'] == i_val) & (df['J'] == j_val)]
         if sub.empty:
-            logger.warning(f"データなし: 格子点 ({i_val},{j_val}) in {csv_path}")
+            logger.warning(f"データなし: 格子点 ({i_val},{j_val}) in {source_label}")
             continue
         row = sub.iloc[0]
         rec = {'time': time_val, 'I': i_val, 'J': j_val}
         for var in variables:
             rec[var] = row.get(var)
         records.append(rec)
-    logger.info(f"{csv_path} から {len(records)} レコードを抽出しました")
+    logger.info(f"{source_label} から {len(records)} レコードを抽出しました")
     return records
 
 
+def extract_records(
+    csv_path: str,
+    grid_points: List[Tuple[int, int]],
+    variables: List[str]
+) -> List[Dict]:
+    """
+    単一の CSV ファイルから、指定した格子点と変数の時刻データを抽出する
+    """
+    time_val, df = read_iric_csv(csv_path)
+    return extract_records_from_df(
+        df=df,
+        time_val=time_val,
+        grid_points=grid_points,
+        variables=variables,
+        source_label=csv_path,
+    )
+
+
 def aggregate_all(
-    input_dir: str,
+    input_path: Path | str,
     grid_points: List[Tuple[int, int]],
     variables: List[str]
 ) -> Dict[Tuple[int, int], pd.DataFrame]:
     """
-    指定ディレクトリ内の全 CSV を処理し、格子点ごとの時系列 DataFrame をまとめて返す
+    入力パスの全ステップを処理し、格子点ごとの時系列 DataFrame をまとめて返す
 
     Args:
-        input_dir (str): CSV ファイルが置かれたディレクトリパス
+        input_path (Path | str): プロジェクトフォルダ / CSVフォルダ / .ipro
         grid_points (List[Tuple[int,int]]): 抽出対象の格子点リスト
         variables (List[str]): 抽出対象の変数名リスト
 
     Returns:
         Dict[Tuple[int,int], pd.DataFrame]: 格子点 (i,j) をキーとした時系列 DataFrame の辞書
     """
-    logger.info(f"CSV 集計開始: {input_dir}")
-    csv_files = list_csv_files(input_dir)
-    logger.info(f"処理対象 CSV ファイル数: {len(csv_files)}")
+    input_path = Path(input_path)
+    logger.info(f"時系列集計開始: {input_path}")
+
+    csv_files: list[str] = []
+    if input_path.is_dir():
+        kind = classify_input_dir(input_path)
+        if kind == "csv_dir":
+            csv_files = list_csv_files(str(input_path))
+            logger.info(f"処理対象 CSV ファイル数: {len(csv_files)}")
 
     all_data: Dict[Tuple[int, int], List[Dict]] = {pt: [] for pt in grid_points}
-    for path in csv_files:
+    if csv_files:
+        for path in csv_files:
+            try:
+                recs = extract_records(path, grid_points, variables)
+                for rec in recs:
+                    key = (rec['I'], rec['J'])
+                    all_data[key].append(rec)
+            except Exception:
+                logger.error(f"CSV 処理失敗: {path}", exc_info=True)
+    else:
+        data_source = DataSource.from_input(input_path)
         try:
-            recs = extract_records(path, grid_points, variables)
-            for rec in recs:
-                key = (rec['I'], rec['J'])
-                all_data[key].append(rec)
-        except Exception:
-            logger.error(f"CSV 処理失敗: {path}", exc_info=True)
+            frames = data_source.iter_frames_with_columns(value_cols=variables)
+            for frame in frames:
+                try:
+                    recs = extract_records_from_df(
+                        df=frame.df,
+                        time_val=frame.time,
+                        grid_points=grid_points,
+                        variables=variables,
+                        source_label=f"step={frame.step}",
+                    )
+                except Exception:
+                    logger.error(f"データ処理失敗: step={frame.step}", exc_info=True)
+                    continue
+                for rec in recs:
+                    key = (rec['I'], rec['J'])
+                    all_data[key].append(rec)
+        finally:
+            data_source.close()
 
     # DataFrame 化
     result: Dict[Tuple[int, int], pd.DataFrame] = {}

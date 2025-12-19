@@ -9,10 +9,11 @@ def load_temp_csvs(
     temp_dir: Union[Path, str]
 ) -> List[pd.DataFrame]:
     temp_dir = Path(temp_dir)
-    return [
-        pd.read_csv(p, encoding="utf-8-sig")
-        for p in sorted(temp_dir.glob("*.csv"), key=lambda p: p.name)
-    ]
+    paths = sorted(temp_dir.glob("*.csv"), key=lambda p: p.name)
+    merged = [p for p in paths if not p.name.startswith(("L_", "R_"))]
+    if merged:
+        paths = merged
+    return [pd.read_csv(p, encoding="utf-8-sig") for p in paths]
 
 def combine_to_excel(
     temp_dir: Union[Path, str],

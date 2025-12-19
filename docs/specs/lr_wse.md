@@ -1,10 +1,10 @@
 # 左右岸最大水位整理（`iRIC_DataScope/lr_wse`）現状実装まとめ
 
 ## 目的
-iRIC 出力 CSV（`Result_*.csv`）から、設定に基づいて左右岸等の集計を行い、Excel に整理して出力する。
+プロジェクトフォルダ / `.ipro` / iRIC 出力 CSV（`Result_*.csv`）から、設定に基づいて左右岸等の集計を行い、Excel に整理して出力する。
 
 ## 入力/出力
-- 入力: `Result_*.csv` が格納されたフォルダ
+- 入力: プロジェクトフォルダ / `.ipro` / `Result_*.csv` が格納されたフォルダ
 - 設定: 設定 CSV（GUI から選択）
 - 出力: Excel（既定 `summary.xlsx`）
 
@@ -12,7 +12,8 @@ iRIC 出力 CSV（`Result_*.csv`）から、設定に基づいて左右岸等の
 - `iRIC_DataScope/lr_wse/config.py`
   - `load_setting()` で設定 CSV を読み込み
 - `iRIC_DataScope/lr_wse/extractor.py`
-  - `extract_all()` で設定に従って中間 CSV を生成
+  - CSVフォルダ入力: `extract_all()` で中間 CSV を生成
+  - プロジェクトフォルダ / `.ipro`: CGNS を直接読み込んで中間 CSV を生成
 - `iRIC_DataScope/lr_wse/writer.py`
   - `combine_to_excel()` で中間 CSV を統合して Excel を出力
 

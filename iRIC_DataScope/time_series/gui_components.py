@@ -10,7 +10,6 @@ iRIC_DataScope/time_series/gui_components.py:
 - ヘルプメニュー（Alt+H で Notion マニュアルを開く）
 - 実行ボタン押下で処理を実行し、結果を通知
 """
-import os
 import logging
 import tkinter as tk
 import webbrowser
@@ -42,6 +41,10 @@ class InputDirectorySelector(PathSelector):
             widget.configure(state="readonly")
         for widget in self.grid_slaves(row=0, column=2):
             widget.destroy()
+
+    def get_path(self):
+        """入力パスはフォルダ/iproどちらでも許容する（検証は後段で行う）"""
+        return self.var.get()
 
 
 class OutputDirectorySelector(PathSelector):
@@ -200,13 +203,17 @@ class VariableSelector(ttk.Frame):
         columns: list[str] = []
 
         # サンプル CSV からカラム一覧を取得
-        if self.sample_dir and os.path.isdir(self.sample_dir):
+        if self.sample_dir:
             try:
-                from iRIC_DataScope.common.csv_reader import list_csv_files, read_iric_csv
-                files = list_csv_files(self.sample_dir)
-                if files:
-                    _, df = read_iric_csv(files[0])
-                    columns = [c for c in df.columns if c not in ('I', 'J')]
+                from iRIC_DataScope.common.iric_data_source import DataSource
+
+                p = Path(self.sample_dir)
+                if p.exists():
+                    data_source = DataSource.from_input(p)
+                    try:
+                        columns = data_source.list_value_columns()
+                    finally:
+                        data_source.close()
             except Exception as e:
                 logger.error(f"VariableSelector: {e}")
 

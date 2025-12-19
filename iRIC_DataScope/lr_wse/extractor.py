@@ -7,6 +7,20 @@ from typing import Literal
 from .reader import read_iric_csv  # assume reader provides t and df
 
 
+def _coerce_index_value(value) -> float | int | None:
+    if pd.isna(value):
+        return None
+    try:
+        num = float(value)
+    except (TypeError, ValueError):
+        return None
+    if not np.isfinite(num):
+        return None
+    if float(num).is_integer():
+        return int(num)
+    return num
+
+
 def extract_bank_data(
     df: pd.DataFrame,
     setting_df: pd.DataFrame,
@@ -24,6 +38,8 @@ def extract_bank_data(
       {prefix}_X, {prefix}_Y
     """
     records = []
+    i_series = pd.to_numeric(df["I"], errors="coerce")
+    j_series = pd.to_numeric(df["J"], errors="coerce")
     for _, s in setting_df.iterrows():
         KP = s['KP']
         if bank == 'L':
@@ -33,6 +49,8 @@ def extract_bank_data(
 
         coord_i = s.get(i_key)
         coord_j = s.get(j_key)
+        coord_i_val = _coerce_index_value(coord_i)
+        coord_j_val = _coerce_index_value(coord_j)
 
         # 初期値は NaN
         wse = np.nan
@@ -40,8 +58,8 @@ def extract_bank_data(
         X = np.nan
         Y = np.nan
 
-        if pd.notna(coord_i) and pd.notna(coord_j):
-            match = df[(df['I'] == coord_i) & (df['J'] == coord_j)]
+        if coord_i_val is not None and coord_j_val is not None:
+            match = df[(i_series == coord_i_val) & (j_series == coord_j_val)]
             if not match.empty:
                 row = match.iloc[0]
                 wse = row.get('watersurfaceelevation(m)', np.nan)
@@ -52,8 +70,8 @@ def extract_bank_data(
         records.append({
             'KP': KP,
             't': t,
-            f'{prefix}_I': coord_i,
-            f'{prefix}_J': coord_j,
+            f'{prefix}_I': coord_i_val if coord_i_val is not None else coord_i,
+            f'{prefix}_J': coord_j_val if coord_j_val is not None else coord_j,
             f'{prefix}_watersurfaceelevation(m)': wse,
             f'{prefix}_elevation(m)': elev,
             f'{prefix}_X': X,
@@ -68,8 +86,8 @@ def extract_all(
     temp_dir: Path
 ) -> None:
     """
-    iRIC 出力フォルダを再帰的に探索し、各 CSV を読み込んで左右岸抽出、
-    個別 CSV を temp_dir に書き出します。
+    iRIC 出力フォルダを再帰的に探索し、各 CSV を読み込んで左右岸抽出を行い、
+    1ステップ分を1ファイルとして temp_dir に書き出します。
     """
     temp_dir = Path(temp_dir)
     temp_dir.mkdir(parents=True, exist_ok=True)
@@ -80,7 +98,28 @@ def extract_all(
         t, df = read_iric_csv(csv_path)
         left_df = extract_bank_data(df, setting_df, 'L', t)
         right_df = extract_bank_data(df, setting_df, 'R', t)
+        merged = pd.merge(left_df, right_df, on=["KP", "t"], how="outer")
         # ファイル名ベースで書き出し
         stem = csv_path.stem
-        left_df.to_csv(temp_dir / f"L_{stem}.csv", index=False, encoding="utf-8-sig")
-        right_df.to_csv(temp_dir / f"R_{stem}.csv", index=False, encoding="utf-8-sig")
+        merged.to_csv(temp_dir / f"{stem}.csv", index=False, encoding="utf-8-sig")
+
+
+def extract_all_from_frames(
+    frames,
+    setting_df: pd.DataFrame,
+    temp_dir: Path
+) -> None:
+    """
+    IricStepFrame の iterable から左右岸抽出を行い、1ステップ分を1ファイルとして書き出す。
+    """
+    temp_dir = Path(temp_dir)
+    temp_dir.mkdir(parents=True, exist_ok=True)
+
+    for frame in frames:
+        t = getattr(frame, "time", 0.0) or 0.0
+        df = frame.df
+        left_df = extract_bank_data(df, setting_df, 'L', t)
+        right_df = extract_bank_data(df, setting_df, 'R', t)
+        merged = pd.merge(left_df, right_df, on=["KP", "t"], how="outer")
+        stem = f"Result_{frame.step}"
+        merged.to_csv(temp_dir / f"{stem}.csv", index=False, encoding="utf-8-sig")

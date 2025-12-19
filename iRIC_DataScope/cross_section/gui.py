@@ -199,9 +199,10 @@ class ProfilePlotGUI(tk.Toplevel):
         out_dir = Path(self.output_var.get())
         logger.debug(f"入力フォルダ: {in_dir}, 出力フォルダ: {out_dir}")
         
-        if not in_dir.is_dir():
+        in_ok = in_dir.is_dir() or (in_dir.is_file() and in_dir.suffix.lower() == ".ipro")
+        if not in_ok:
             logger.error(f"入力フォルダが無効: {in_dir}")
-            messagebox.showerror("エラー", f"入力フォルダが無効です:\n{in_dir}")
+            messagebox.showerror("エラー", f"入力が無効です:\n{in_dir}")
             return
         if not out_dir.is_dir():
             logger.error(f"出力フォルダが無効: {out_dir}")
@@ -211,13 +212,11 @@ class ProfilePlotGUI(tk.Toplevel):
         mode = self.mode_var.get()
         logger.info(f"実行モード: {mode}")
         sel_file = None
-        if mode == 'single':
+        if mode == 'single' and self.file_var.get().strip():
             file_path = Path(self.file_var.get())
             logger.debug(f"選択ファイル: {file_path}")
-            if not file_path.is_file():
-                messagebox.showerror("エラー", "対象ファイルが選択されていないか無効です。")
-                return
-            sel_file = str(file_path)
+            if file_path.is_file():
+                sel_file = str(file_path)
 
         text = self.include_var.get().strip()
         if not text:

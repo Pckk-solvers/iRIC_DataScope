@@ -23,6 +23,16 @@ from iRIC_DataScope.common.iric_project import (
 logger = logging.getLogger(__name__)
 
 
+def _dedupe_columns(cols: list[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for c in cols:
+        if c and c not in seen:
+            out.append(c)
+            seen.add(c)
+    return out
+
+
 def _parse_step_number(path: Path) -> int | None:
     m = re.search(r"Result_(\d+)", path.stem, flags=re.IGNORECASE)
     if not m:
@@ -303,22 +313,30 @@ class DataSource:
             return sorted(out)
 
     def iter_frames(self, *, value_col: str) -> Iterable["IricStepFrame"]:
-        if self.kind == "csv_dir":
-            yield from self._iter_csv_frames(value_col=value_col)
-            return
-        if self.kind == "cgns_series":
-            yield from self._iter_cgns_series_frames(value_col=value_col)
-            return
-        yield from self._iter_cgns_frames(value_col=value_col)
+        yield from self.iter_frames_with_columns(value_cols=[value_col])
 
     def get_frame(self, *, step: int, value_col: str):
-        if self.kind == "csv_dir":
-            return self._get_csv_frame(step=step, value_col=value_col)
-        if self.kind == "cgns_series":
-            return self._get_cgns_series_frame(step=step, value_col=value_col)
-        return self._get_cgns_frame(step=step, value_col=value_col)
+        return self.get_frame_with_columns(step=step, value_cols=[value_col])
 
-    def _iter_cgns_frames(self, *, value_col: str):
+    def iter_frames_with_columns(self, *, value_cols: list[str]) -> Iterable["IricStepFrame"]:
+        cols = _dedupe_columns(value_cols)
+        if self.kind == "csv_dir":
+            yield from self._iter_csv_frames(value_cols=cols)
+            return
+        if self.kind == "cgns_series":
+            yield from self._iter_cgns_series_frames(value_cols=cols)
+            return
+        yield from self._iter_cgns_frames(value_cols=cols)
+
+    def get_frame_with_columns(self, *, step: int, value_cols: list[str]):
+        cols = _dedupe_columns(value_cols)
+        if self.kind == "csv_dir":
+            return self._get_csv_frame(step=step, value_cols=cols)
+        if self.kind == "cgns_series":
+            return self._get_cgns_series_frame(step=step, value_cols=cols)
+        return self._get_cgns_frame(step=step, value_cols=cols)
+
+    def _iter_cgns_frames(self, *, value_cols: list[str]):
         from iRIC_DataScope.common.cgns_reader import iter_iric_step_frames
 
         if not self.cgn_path:
@@ -326,7 +344,7 @@ class DataSource:
         yield from iter_iric_step_frames(
             self.cgn_path,
             zone_path=self.zone_path,
-            vars_keep=[value_col],
+            vars_keep=value_cols,
             step_from=1,
             step_to=self.step_count,
             step_skip=1,
@@ -334,7 +352,7 @@ class DataSource:
             include_flow_solution=True,
         )
 
-    def _get_cgns_frame(self, *, step: int, value_col: str):
+    def _get_cgns_frame(self, *, step: int, value_cols: list[str]):
         from iRIC_DataScope.common.cgns_reader import iter_iric_step_frames
 
         if not self.cgn_path:
@@ -342,7 +360,7 @@ class DataSource:
         gen = iter_iric_step_frames(
             self.cgn_path,
             zone_path=self.zone_path,
-            vars_keep=[value_col],
+            vars_keep=value_cols,
             step_from=step,
             step_to=step,
             step_skip=1,
@@ -351,7 +369,7 @@ class DataSource:
         )
         return next(gen)
 
-    def _iter_cgns_series_frames(self, *, value_col: str):
+    def _iter_cgns_series_frames(self, *, value_cols: list[str]):
         from iRIC_DataScope.common.cgns_reader import IricStepFrame, iter_iric_step_frames
 
         if not self.cgn_paths:
@@ -361,7 +379,7 @@ class DataSource:
             gen = iter_iric_step_frames(
                 cgn_path,
                 zone_path=self.zone_path,
-                vars_keep=[value_col],
+                vars_keep=value_cols,
                 step_from=1,
                 step_to=1,
                 step_skip=1,
@@ -381,7 +399,7 @@ class DataSource:
                 df=frame.df,
             )
 
-    def _get_cgns_series_frame(self, *, step: int, value_col: str):
+    def _get_cgns_series_frame(self, *, step: int, value_cols: list[str]):
         from iRIC_DataScope.common.cgns_reader import IricStepFrame, iter_iric_step_frames
 
         if not self.cgn_paths:
@@ -396,7 +414,7 @@ class DataSource:
         gen = iter_iric_step_frames(
             cgn_path,
             zone_path=self.zone_path,
-            vars_keep=[value_col],
+            vars_keep=value_cols,
             step_from=1,
             step_to=1,
             step_skip=1,
@@ -443,17 +461,18 @@ class DataSource:
         cols = [c for c in df_head.columns if c not in {"I", "J", "X", "Y"}]
         return cols
 
-    def _iter_csv_frames(self, *, value_col: str):
+    def _iter_csv_frames(self, *, value_cols: list[str]):
         from iRIC_DataScope.common.cgns_reader import IricStepFrame
 
         if not self._csv_files:
             return
         for idx, p in enumerate(self._csv_files):
             step = self.steps[idx]
-            t, imax, jmax, df = _read_iric_result_csv(p, usecols=["I", "J", "X", "Y", value_col])
+            cols = _dedupe_columns(["I", "J", "X", "Y", *value_cols])
+            t, imax, jmax, df = _read_iric_result_csv(p, usecols=cols)
             yield IricStepFrame(step=step, time=t, imax=imax, jmax=jmax, location=None, df=df)
 
-    def _get_csv_frame(self, *, step: int, value_col: str):
+    def _get_csv_frame(self, *, step: int, value_cols: list[str]):
         from iRIC_DataScope.common.cgns_reader import IricStepFrame
 
         if not self._csv_files:
@@ -464,5 +483,6 @@ class DataSource:
         else:
             idx = max(0, min(step - 1, len(self._csv_files) - 1))
         p = self._csv_files[idx]
-        t, imax, jmax, df = _read_iric_result_csv(p, usecols=["I", "J", "X", "Y", value_col])
+        cols = _dedupe_columns(["I", "J", "X", "Y", *value_cols])
+        t, imax, jmax, df = _read_iric_result_csv(p, usecols=cols)
         return IricStepFrame(step=self.steps[idx], time=t, imax=imax, jmax=jmax, location=None, df=df)
