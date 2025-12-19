@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 import sys
 from tempfile import TemporaryDirectory
-from typing import Optional, Union
+from typing import Callable, Optional, Union
 
 import pandas as pd
 
@@ -32,7 +32,8 @@ def run_lr_wse(
     output_dir: Path,
     excel_filename: str = "summary.xlsx",
     missing_elev: Optional[Union[str, float]] = None,
-    temp_dir: Optional[Path] = None
+    temp_dir: Optional[Path] = None,
+    on_swap_warning: Callable[[str], None] | None = None,
 ) -> Path:
     """
     iRIC 左右岸最大水位整理の共通処理。
@@ -60,13 +61,23 @@ def run_lr_wse(
         logger.info("中間CSV出力開始 (指定ディレクトリ)")
         temp_dir.mkdir(parents=True, exist_ok=True)
         td = temp_dir
-        _extract_input_to_temp(input_path=input_path, setting_df=setting_df, temp_dir=td)
+        _extract_input_to_temp(
+            input_path=input_path,
+            setting_df=setting_df,
+            temp_dir=td,
+            on_swap_warning=on_swap_warning,
+        )
         logger.info("中間CSV出力完了")
     else:
         logger.info("中間CSV出力開始 (一時ディレクトリ)")
         with TemporaryDirectory() as td_path:
             td = Path(td_path)
-            _extract_input_to_temp(input_path=input_path, setting_df=setting_df, temp_dir=td)
+            _extract_input_to_temp(
+                input_path=input_path,
+                setting_df=setting_df,
+                temp_dir=td,
+                on_swap_warning=on_swap_warning,
+            )
             logger.info("中間CSV出力完了")
             logger.info("Excel結合開始")
             result = combine_to_excel(
@@ -93,7 +104,13 @@ def _extract_input_to_temp(
     input_path: Path,
     setting_df: pd.DataFrame,
     temp_dir: Path,
+    on_swap_warning: Callable[[str], None] | None = None,
 ) -> None:
+    def _default_warn(message: str) -> None:
+        logger.warning(message)
+        print(message)
+
+    warn = on_swap_warning or _default_warn
     if input_path.is_file():
         if input_path.suffix.lower() != ".ipro":
             raise ValueError("入力にはプロジェクトフォルダ、CSVフォルダ、または .ipro を指定してください。")
@@ -102,14 +119,24 @@ def _extract_input_to_temp(
             frames = data_source.iter_frames_with_columns(
                 value_cols=["watersurfaceelevation(m)", "elevation(m)"]
             )
-            extract_all_from_frames(frames, setting_df=setting_df, temp_dir=temp_dir)
+            extract_all_from_frames(
+                frames,
+                setting_df=setting_df,
+                temp_dir=temp_dir,
+                on_swap_warning=warn,
+            )
         finally:
             data_source.close()
         return
 
     kind = classify_input_dir(input_path)
     if kind == "csv_dir":
-        extract_all(input_dir=input_path, setting_df=setting_df, temp_dir=temp_dir)
+        extract_all(
+            input_dir=input_path,
+            setting_df=setting_df,
+            temp_dir=temp_dir,
+            on_swap_warning=warn,
+        )
         return
 
     data_source = DataSource.from_input(input_path)
@@ -117,7 +144,12 @@ def _extract_input_to_temp(
         frames = data_source.iter_frames_with_columns(
             value_cols=["watersurfaceelevation(m)", "elevation(m)"]
         )
-        extract_all_from_frames(frames, setting_df=setting_df, temp_dir=temp_dir)
+        extract_all_from_frames(
+            frames,
+            setting_df=setting_df,
+            temp_dir=temp_dir,
+            on_swap_warning=warn,
+        )
     finally:
         data_source.close()
 

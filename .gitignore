@@ -1,6 +1,8 @@
 venv/
 **/dist/
 **/build/
+build_docs/
+site/
 **/__pycache__/
 *.ipro
 *.cgn
@@ -9,3 +11,6 @@ output/
 output2
 sample_data_randomname/
 sample_data/
+Result_*.csv
+L_Result_*.csv
+R_Result_*.csv

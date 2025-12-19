@@ -38,6 +38,7 @@ class LrWseGUI(tk.Toplevel):
         self.input_dir = input_dir
         self.output_dir = output_dir
         self.config_file = None
+        self._swap_warned = False
 
         # 1. ウィンドウ設定
         self._configure_window()
@@ -205,7 +206,8 @@ class LrWseGUI(tk.Toplevel):
                 output_dir=out_dir,
                 excel_filename=self.filename_var.get(),
                 missing_elev=missing,
-                temp_dir=temp_dir
+                temp_dir=temp_dir,
+                on_swap_warning=self._warn_setting_mismatch,
             )
             logger.info(f"処理完了: 出力ファイル={out_path}")
             # 完了ダイアログを表示し、OK が押されたら Toplevel を閉じる
@@ -218,6 +220,12 @@ class LrWseGUI(tk.Toplevel):
         """Notion マニュアルを既定ブラウザで開く"""
         logger.info("マニュアルを開く")
         webbrowser.open("https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=25#1f4ed1e8e79f80fba2c3c518b62fc898")
+
+    def _warn_setting_mismatch(self, message: str) -> None:
+        if self._swap_warned:
+            return
+        self._swap_warned = True
+        messagebox.showwarning("警告", message)
 
 if __name__ == "__main__":
     # コマンドライン引数: 入力フォルダ, 出力フォルダ

@@ -150,6 +150,134 @@ def downsample_grid_for_preview(
     )
 
 
+def estimate_grid_spacing(x: np.ndarray, y: np.ndarray) -> tuple[float, float]:
+    def _median_spacing(dx: np.ndarray, dy: np.ndarray) -> float | None:
+        dist = np.hypot(dx, dy).ravel()
+        dist = dist[np.isfinite(dist) & (dist > 0)]
+        if dist.size == 0:
+            return None
+        return float(np.median(dist))
+
+    dx = _median_spacing(np.diff(x, axis=1), np.diff(y, axis=1))
+    dy = _median_spacing(np.diff(x, axis=0), np.diff(y, axis=0))
+
+    if dx is None:
+        dx = float((np.nanmax(x) - np.nanmin(x)) / max(x.shape[1] - 1, 1))
+    if dy is None:
+        dy = float((np.nanmax(y) - np.nanmin(y)) / max(y.shape[0] - 1, 1))
+    if dx <= 0 or not np.isfinite(dx):
+        dx = 1.0
+    if dy <= 0 or not np.isfinite(dy):
+        dy = 1.0
+    return dx, dy
+
+
+def rotate_xy(
+    x: np.ndarray, y: np.ndarray, *, center: tuple[float, float], angle_deg: float
+) -> tuple[np.ndarray, np.ndarray]:
+    cx, cy = center
+    theta = math.radians(angle_deg)
+    cos_t = math.cos(theta)
+    sin_t = math.sin(theta)
+    x0 = x - cx
+    y0 = y - cy
+    xr = cos_t * x0 - sin_t * y0 + cx
+    yr = sin_t * x0 + cos_t * y0 + cy
+    return xr, yr
+
+
+def compute_rotated_roi_bounds(
+    roi: Roi, *, rotation_deg: float, center: tuple[float, float]
+) -> Roi:
+    if abs(rotation_deg) < 1e-12:
+        return roi
+    corners = np.array(
+        [
+            [roi.xmin, roi.ymin],
+            [roi.xmin, roi.ymax],
+            [roi.xmax, roi.ymin],
+            [roi.xmax, roi.ymax],
+        ],
+        dtype=float,
+    )
+    x0, y0 = rotate_xy(corners[:, 0], corners[:, 1], center=center, angle_deg=-rotation_deg)
+    return Roi(
+        xmin=float(np.min(x0)),
+        xmax=float(np.max(x0)),
+        ymin=float(np.min(y0)),
+        ymax=float(np.max(y0)),
+    )
+
+
+def resample_grid_ij(
+    grid: RoiGrid,
+    *,
+    dx: float,
+    dy: float,
+    method: str = "linear",
+) -> RoiGrid:
+    if dx <= 0 or dy <= 0:
+        raise ValueError("dx/dy は正の値である必要があります。")
+    base_dx, base_dy = estimate_grid_spacing(grid.x, grid.y)
+    fx = base_dx / dx if dx > 0 else 1.0
+    fy = base_dy / dy if dy > 0 else 1.0
+    if not np.isfinite(fx) or fx <= 0:
+        fx = 1.0
+    if not np.isfinite(fy) or fy <= 0:
+        fy = 1.0
+    if abs(fx - 1.0) < 1e-3 and abs(fy - 1.0) < 1e-3:
+        return RoiGrid(x=grid.x, y=grid.y, v=grid.v, mask=np.ones_like(grid.v, dtype=bool))
+
+    from scipy.ndimage import zoom
+
+    order = 1 if method == "linear" else 3
+    x2 = zoom(grid.x, zoom=(fy, fx), order=order)
+    y2 = zoom(grid.y, zoom=(fy, fx), order=order)
+    v2 = zoom(np.asarray(grid.v, dtype=float), zoom=(fy, fx), order=order)
+    return RoiGrid(x=x2, y=y2, v=v2, mask=np.ones_like(v2, dtype=bool))
+
+
+def prepare_rotated_grid_from_grid(
+    grid: RoiGrid,
+    *,
+    roi: Roi,
+    rotation_deg: float,
+    dx: float,
+    dy: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    grid = resample_grid_ij(grid, dx=dx, dy=dy)
+    center = ((roi.xmin + roi.xmax) / 2.0, (roi.ymin + roi.ymax) / 2.0)
+    x_rot, y_rot = rotate_xy(grid.x, grid.y, center=center, angle_deg=rotation_deg)
+    mask = (roi.xmin <= x_rot) & (x_rot <= roi.xmax) & (roi.ymin <= y_rot) & (y_rot <= roi.ymax)
+    vals = np.asarray(grid.v, dtype=float)
+    vals[~mask] = np.nan
+    return x_rot, y_rot, vals
+
+
+def prepare_rotated_grid(
+    x: np.ndarray,
+    y: np.ndarray,
+    v: np.ndarray,
+    *,
+    roi: Roi,
+    rotation_deg: float,
+    dx: float,
+    dy: float,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+    center = ((roi.xmin + roi.xmax) / 2.0, (roi.ymin + roi.ymax) / 2.0)
+    bounds = compute_rotated_roi_bounds(roi, rotation_deg=rotation_deg, center=center)
+    grid = slice_grids_to_roi(x, y, v, roi=bounds)
+    if grid is None:
+        return None
+    return prepare_rotated_grid_from_grid(
+        grid,
+        roi=roi,
+        rotation_deg=rotation_deg,
+        dx=dx,
+        dy=dy,
+    )
+
+
 def compute_global_value_range(data_source: DataSource, *, value_col: str, roi: Roi) -> tuple[float, float]:
     vmin = float("inf")
     vmax = float("-inf")
@@ -166,6 +294,52 @@ def compute_global_value_range(data_source: DataSource, *, value_col: str, roi: 
         found = True
         vmin = min(vmin, float(finite.min()))
         vmax = max(vmax, float(finite.max()))
+    if not found:
+        raise ValueError("ROI 内に有効な値が見つかりませんでした。")
+    if vmin == vmax:
+        vmax = vmin + 1e-12
+    return vmin, vmax
+
+
+def compute_global_value_range_rotated(
+    data_source: DataSource,
+    *,
+    value_col: str,
+    roi: Roi,
+    rotation_deg: float,
+    dx: float,
+    dy: float,
+) -> tuple[float, float]:
+    vmin = float("inf")
+    vmax = float("-inf")
+    found = False
+    center = ((roi.xmin + roi.xmax) / 2.0, (roi.ymin + roi.ymax) / 2.0)
+    bounds = compute_rotated_roi_bounds(roi, rotation_deg=rotation_deg, center=center)
+
+    for frame in data_source.iter_frames(value_col=value_col):
+        try:
+            x, y, v = frame_to_grids(frame, value_col=value_col)
+            grid = slice_grids_to_roi(x, y, v, roi=bounds)
+            if grid is None:
+                continue
+            _, _, vals = prepare_rotated_grid_from_grid(
+                grid,
+                roi=roi,
+                rotation_deg=rotation_deg,
+                dx=dx,
+                dy=dy,
+            )
+        except Exception:
+            logger.exception("globalスケール計算に失敗: step=%s", frame.step)
+            continue
+
+        finite = vals[np.isfinite(vals)]
+        if finite.size == 0:
+            continue
+        found = True
+        vmin = min(vmin, float(finite.min()))
+        vmax = max(vmax, float(finite.max()))
+
     if not found:
         raise ValueError("ROI 内に有効な値が見つかりませんでした。")
     if vmin == vmax:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import math
 import threading
 import tkinter as tk
 import webbrowser
@@ -16,11 +17,12 @@ from .processor import (
     Roi,
     build_colormap,
     clamp_roi_to_bounds,
-    apply_mask_to_values,
-    compute_global_value_range,
-    downsample_grid_for_preview,
+    compute_global_value_range_rotated,
+    compute_rotated_roi_bounds,
+    estimate_grid_spacing,
     frame_to_grids,
     parse_color,
+    prepare_rotated_grid_from_grid,
     slice_grids_to_roi,
 )
 
@@ -151,18 +153,36 @@ class XYValueMapGUI(tk.Toplevel):
         self.vmin_var.trace_add("write", lambda *_: self._schedule_preview_update())
         self.vmax_var.trace_add("write", lambda *_: self._schedule_preview_update())
 
+        # 回転/解像度
+        ttk.Label(self, text="回転角度(°):").grid(row=6, column=0, sticky="e", **pad)
+        self.rotation_var = tk.DoubleVar(value=0.0)
+        self.rotation_entry = ttk.Entry(self, textvariable=self.rotation_var, width=10)
+        self.rotation_entry.grid(row=6, column=1, sticky="w", **pad)
+
+        ttk.Label(self, text="dx:").grid(row=6, column=2, sticky="e", **pad)
+        self.dx_var = tk.DoubleVar()
+        self.dy_var = tk.DoubleVar()
+        self.dx_entry = ttk.Entry(self, textvariable=self.dx_var, width=10)
+        self.dy_entry = ttk.Entry(self, textvariable=self.dy_var, width=10)
+        self.dx_entry.grid(row=6, column=3, sticky="w", **pad)
+        ttk.Label(self, text="dy:").grid(row=6, column=4, sticky="e", **pad)
+        self.dy_entry.grid(row=6, column=5, sticky="w", **pad)
+
+        for var in (self.rotation_var, self.dx_var, self.dy_var):
+            var.trace_add("write", lambda *_: self._on_rotation_or_resolution_changed())
+
         # ステータス
         self.status_var = tk.StringVar(value="")
-        ttk.Label(self, textvariable=self.status_var).grid(row=6, column=0, columnspan=6, sticky="w", padx=8, pady=(2, 6))
+        ttk.Label(self, textvariable=self.status_var).grid(row=7, column=0, columnspan=6, sticky="w", padx=8, pady=(2, 6))
 
         # プレビュー
         preview_frame = ttk.LabelFrame(self, text="プレビュー（ROIはドラッグで指定）")
-        preview_frame.grid(row=7, column=0, columnspan=6, sticky="nsew", padx=8, pady=8)
+        preview_frame.grid(row=8, column=0, columnspan=6, sticky="nsew", padx=8, pady=8)
         self._build_preview(preview_frame)
 
         # 実行
         btn_frame = ttk.Frame(self)
-        btn_frame.grid(row=8, column=0, columnspan=6, sticky="ew", padx=8, pady=10)
+        btn_frame.grid(row=9, column=0, columnspan=6, sticky="ew", padx=8, pady=10)
         btn_frame.columnconfigure(0, weight=1)
         btn_frame.columnconfigure(1, weight=1)
         ttk.Button(btn_frame, text="このステップのみ出力", command=self._run_single_step).grid(row=0, column=0, sticky="ew", padx=(0, 6))
@@ -171,7 +191,7 @@ class XYValueMapGUI(tk.Toplevel):
         # layout
         self.grid_columnconfigure(1, weight=1)
         self.grid_columnconfigure(4, weight=1)
-        self.grid_rowconfigure(7, weight=1)
+        self.grid_rowconfigure(8, weight=1)
 
     def _build_preview(self, parent):
         # Matplotlib は重いので遅延 import
@@ -222,6 +242,15 @@ class XYValueMapGUI(tk.Toplevel):
         self.ymin_var.set(ymin)
         self.ymax_var.set(ymax)
 
+        try:
+            frame0 = self._data_source.get_frame(step=1, value_col=self.value_var.get())
+            x0, y0, _ = frame_to_grids(frame0, value_col=self.value_var.get())
+            dx, dy = estimate_grid_spacing(x0, y0)
+        except Exception:
+            dx, dy = 1.0, 1.0
+        self.dx_var.set(dx)
+        self.dy_var.set(dy)
+
         self._on_scale_mode_changed()
         self._schedule_preview_update(immediate=True)
 
@@ -248,6 +277,10 @@ class XYValueMapGUI(tk.Toplevel):
     def _on_color_changed(self):
         self.min_color_sample.configure(background=self.min_color_var.get())
         self.max_color_sample.configure(background=self.max_color_var.get())
+        self._schedule_preview_update()
+
+    def _on_rotation_or_resolution_changed(self):
+        self._invalidate_global_scale()
         self._schedule_preview_update()
 
     def _on_scale_mode_changed(self):
@@ -289,6 +322,14 @@ class XYValueMapGUI(tk.Toplevel):
         if self._global_scale.vmin is not None and self._global_scale.vmax is not None:
             return self._global_scale.vmin, self._global_scale.vmax
         return None
+
+    def _get_rotation_and_resolution(self) -> tuple[float, float, float]:
+        rotation = float(self.rotation_var.get() or 0.0)
+        dx = float(self.dx_var.get())
+        dy = float(self.dy_var.get())
+        if dx <= 0 or dy <= 0:
+            raise ValueError("dx/dy は正の値である必要があります。")
+        return rotation, dx, dy
 
     def _schedule_preview_update(self, immediate: bool = False):
         if hasattr(self, "_preview_job") and self._preview_job:
@@ -344,6 +385,11 @@ class XYValueMapGUI(tk.Toplevel):
             roi = self._get_roi()
         except Exception:
             return
+        try:
+            rotation_deg, dx, dy = self._get_rotation_and_resolution()
+        except Exception as e:
+            self.status_var.set(str(e))
+            return
 
         step = int(self.step_var.get() or 1)
         step = max(1, min(step, self._data_source.step_count))
@@ -351,7 +397,7 @@ class XYValueMapGUI(tk.Toplevel):
 
         # global スケールの計算（非同期）
         if self.scale_mode.get() == "global":
-            self._ensure_global_scale_async(value_col, roi)
+            self._ensure_global_scale_async(value_col, roi, rotation_deg, dx, dy)
 
         try:
             frame = self._get_preview_frame(step, value_col)
@@ -362,7 +408,9 @@ class XYValueMapGUI(tk.Toplevel):
 
         try:
             x, y, v = frame_to_grids(frame, value_col=value_col)
-            grid = slice_grids_to_roi(x, y, v, roi=roi)
+            center = ((roi.xmin + roi.xmax) / 2.0, (roi.ymin + roi.ymax) / 2.0)
+            bounds = compute_rotated_roi_bounds(roi, rotation_deg=rotation_deg, center=center)
+            grid = slice_grids_to_roi(x, y, v, roi=bounds)
         except Exception as e:
             self.status_var.set("")
             messagebox.showerror("エラー", f"プレビュー描画用データの準備に失敗しました:\n{e}")
@@ -373,13 +421,39 @@ class XYValueMapGUI(tk.Toplevel):
             self._draw_empty_preview(roi)
             return
 
-        grid = downsample_grid_for_preview(grid, max_points=40000)
-        vals_masked = apply_mask_to_values(grid.v, grid.mask)
+        preview_max = 60000
+        base_dx, base_dy = estimate_grid_spacing(grid.x, grid.y)
+        fx = base_dx / dx if dx > 0 else 1.0
+        fy = base_dy / dy if dy > 0 else 1.0
+        if not np.isfinite(fx) or fx <= 0:
+            fx = 1.0
+        if not np.isfinite(fy) or fy <= 0:
+            fy = 1.0
+        est_points = grid.x.size * fx * fy
+        dx_p, dy_p = dx, dy
+        if est_points > preview_max:
+            scale = math.sqrt(est_points / preview_max)
+            dx_p = dx * scale
+            dy_p = dy * scale
+            self.status_var.set(f"プレビュー軽量化のため dx/dy を {dx_p:.4g}/{dy_p:.4g} に調整しました")
+
+        try:
+            out_x, out_y, vals_resampled = prepare_rotated_grid_from_grid(
+                grid,
+                roi=roi,
+                rotation_deg=rotation_deg,
+                dx=dx_p,
+                dy=dy_p,
+            )
+        except Exception as e:
+            self.status_var.set("")
+            messagebox.showerror("エラー", f"プレビュー補間の準備に失敗しました:\n{e}")
+            return
 
         cmap = build_colormap(self.min_color_var.get(), self.max_color_var.get())
         scale = self._get_scale()
         if scale is None:
-            finite = vals_masked[np.isfinite(vals_masked)]
+            finite = vals_resampled[np.isfinite(vals_resampled)]
             if finite.size:
                 vmin, vmax = float(finite.min()), float(finite.max())
                 self.status_var.set("globalスケール計算中（暫定表示）" if self.scale_mode.get() == "global" else "")
@@ -390,9 +464,9 @@ class XYValueMapGUI(tk.Toplevel):
             self.status_var.set("")
 
         self._draw_preview(
-            x=grid.x,
-            y=grid.y,
-            vals=vals_masked,
+            x=out_x,
+            y=out_y,
+            vals=vals_resampled,
             roi=roi,
             value_col=value_col,
             step=frame.step,
@@ -464,7 +538,7 @@ class XYValueMapGUI(tk.Toplevel):
         self._preview_frame_cache[key] = frame
         return frame
 
-    def _ensure_global_scale_async(self, value_col: str, roi: Roi):
+    def _ensure_global_scale_async(self, value_col: str, roi: Roi, rotation_deg: float, dx: float, dy: float):
         if self._global_scale.running:
             return
         if self._global_scale.vmin is not None and self._global_scale.vmax is not None:
@@ -477,7 +551,14 @@ class XYValueMapGUI(tk.Toplevel):
 
         def worker():
             try:
-                vmin, vmax = compute_global_value_range(self._data_source, value_col=value_col, roi=roi)
+                vmin, vmax = compute_global_value_range_rotated(
+                    self._data_source,
+                    value_col=value_col,
+                    roi=roi,
+                    rotation_deg=rotation_deg,
+                    dx=dx,
+                    dy=dy,
+                )
             except Exception as e:
                 logger.exception("globalスケール計算に失敗")
 
@@ -519,6 +600,11 @@ class XYValueMapGUI(tk.Toplevel):
         except Exception as e:
             messagebox.showerror("エラー", f"ROI が不正です:\n{e}")
             return
+        try:
+            rotation_deg, dx, dy = self._get_rotation_and_resolution()
+        except Exception as e:
+            messagebox.showerror("エラー", f"回転/解像度の指定が不正です:\n{e}")
+            return
 
         scale_mode = self.scale_mode.get()
         if scale_mode == "manual":
@@ -556,6 +642,9 @@ class XYValueMapGUI(tk.Toplevel):
                 max_color=max_color,
                 scale_mode=scale_mode,
                 manual_scale=scale,
+                rotation_deg=rotation_deg,
+                dx=dx,
+                dy=dy,
                 progress=progress,
             )
         except Exception as e:
@@ -578,6 +667,11 @@ class XYValueMapGUI(tk.Toplevel):
             roi = self._get_roi()
         except Exception as e:
             messagebox.showerror("エラー", f"ROI が不正です:\n{e}")
+            return
+        try:
+            rotation_deg, dx, dy = self._get_rotation_and_resolution()
+        except Exception as e:
+            messagebox.showerror("エラー", f"回転/解像度の指定が不正です:\n{e}")
             return
 
         step = int(self.step_var.get() or 1)
@@ -610,11 +704,19 @@ class XYValueMapGUI(tk.Toplevel):
                 try:
                     frame = self._get_preview_frame(step, value_col)
                     x, y, v = frame_to_grids(frame, value_col=value_col)
-                    grid = slice_grids_to_roi(x, y, v, roi=roi)
+                    center = ((roi.xmin + roi.xmax) / 2.0, (roi.ymin + roi.ymax) / 2.0)
+                    bounds = compute_rotated_roi_bounds(roi, rotation_deg=rotation_deg, center=center)
+                    grid = slice_grids_to_roi(x, y, v, roi=bounds)
                     if grid is None:
                         messagebox.showerror("エラー", "ROI 内に点がありません。")
                         return
-                    vals = apply_mask_to_values(grid.v, grid.mask)
+                    _, _, vals = prepare_rotated_grid_from_grid(
+                        grid,
+                        roi=roi,
+                        rotation_deg=rotation_deg,
+                        dx=dx,
+                        dy=dy,
+                    )
                     finite = vals[np.isfinite(vals)]
                     if finite.size == 0:
                         messagebox.showerror("エラー", "ROI 内の Value が全て NaN/Inf です。")
@@ -650,6 +752,9 @@ class XYValueMapGUI(tk.Toplevel):
                 max_color=max_color,
                 vmin=vmin,
                 vmax=vmax,
+                rotation_deg=rotation_deg,
+                dx=dx,
+                dy=dy,
             )
         except Exception as e:
             logger.exception("このステップのみ出力に失敗しました")

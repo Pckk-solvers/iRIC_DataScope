@@ -1,0 +1,30 @@
+site_name: iRIC_DataScope Docs
+docs_dir: docs
+site_dir: build_docs/site
+
+theme:
+  name: readthedocs
+
+nav:
+  - ドキュメント: index.md
+  - ユーザ向け:
+      - はじめに: user_docs/index.md
+      - ランチャー: user_docs/launcher.md
+      - 左右岸水位抽出: user_docs/lr_wse.md
+      - 横断重ね合わせ図作成: user_docs/cross_section.md
+      - 時系列データ抽出: user_docs/time_series.md
+      - X-Y Value マップ: user_docs/xy_value_map.md
+      - (ひな形): user_docs/_template.md
+  - 開発向け（仕様）:
+      - プロジェクト/ipro入力: specs/ipro_cgn_conversion.md
+      - ランチャー: specs/launcher.md
+      - 左右岸最大水位整理: specs/lr_wse.md
+      - 横断重ね合わせ図作成: specs/cross_section.md
+      - 時系列データ抽出: specs/time_series.md
+      - X-Y 分布画像出力: specs/xy_value_colormap_export.md
+  - ビルド/配布:
+      - PyInstaller: build_docs/pyinstaller.md
+
+markdown_extensions:
+  - toc:
+      permalink: true
