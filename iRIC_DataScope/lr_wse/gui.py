@@ -141,9 +141,20 @@ class LrWseGUI(tk.Toplevel):
 
     def _toggle_temp_ui(self):
         """中間フォルダ選択 UI の有効/無効切り替え"""
-        state = 'normal' if self.use_temp.get() else 'disabled'
-        self.temp_entry.configure(state=state)
-        self.temp_btn.configure(state=state)
+        if self.use_temp.get():
+            out_dir = Path(self.output_var.get())
+            temp_dir = self._resolve_temp_dir(out_dir, self.filename_var.get())
+            self.temp_var.set(str(temp_dir))
+            self.temp_entry.configure(state='disabled')
+            self.temp_btn.configure(state='disabled')
+        else:
+            self.temp_var.set("")
+            self.temp_entry.configure(state='disabled')
+            self.temp_btn.configure(state='disabled')
+
+    def _resolve_temp_dir(self, output_dir: Path, excel_name: str) -> Path:
+        name = Path(excel_name).stem if excel_name else "LR_WSE"
+        return output_dir / name
 
     def _choose_temp_dir(self):
         """中間フォルダを選択し、変数にセット"""
@@ -182,7 +193,10 @@ class LrWseGUI(tk.Toplevel):
                 return
             
             missing = None if self.missing_var.get() == "" else self.missing_var.get()
-            temp_dir = Path(self.temp_var.get()) if self.use_temp.get() else None
+            temp_dir = None
+            if self.use_temp.get():
+                temp_dir = self._resolve_temp_dir(out_dir, self.filename_var.get())
+                self.temp_var.set(str(temp_dir))
             logger.debug(f"実行パラメータ: missing_elev={missing}, temp_dir={temp_dir}")
             
             out_path = run_lr_wse(
