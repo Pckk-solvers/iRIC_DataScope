@@ -40,7 +40,30 @@ def _build_title(
     return "  ".join(parts)
 
 
-def _apply_plot_options(ax, *, show_ticks: bool, show_frame: bool):
+def figure_size_from_roi(
+    roi: Roi,
+    *,
+    base_short: float = 6.0,
+    min_side: float = 3.5,
+    max_side: float = 12.0,
+) -> tuple[float, float]:
+    width = max(float(roi.width), 1e-12)
+    height = max(float(roi.height), 1e-12)
+    aspect = height / width if width > 0 else 1.0
+    if not np.isfinite(aspect) or aspect <= 0:
+        aspect = 1.0
+    if aspect >= 1.0:
+        w = base_short
+        h = base_short * aspect
+    else:
+        h = base_short
+        w = base_short / aspect
+    w = min(max(w, min_side), max_side)
+    h = min(max(h, min_side), max_side)
+    return (w, h)
+
+
+def _apply_plot_options(ax, *, show_ticks: bool, show_frame: bool, margin_pct: float = 0.0):
     ax.tick_params(
         bottom=show_ticks,
         left=show_ticks,
@@ -49,6 +72,99 @@ def _apply_plot_options(ax, *, show_ticks: bool, show_frame: bool):
     )
     for spine in ax.spines.values():
         spine.set_visible(show_frame)
+    if margin_pct > 0.0:
+        m = min(max(margin_pct, 0.0), 50.0) / 100.0
+        left = m
+        right = 1.0 - m
+        bottom = m
+        top = 1.0 - m
+        try:
+            ax.figure.subplots_adjust(left=left, right=right, bottom=bottom, top=top)
+        except Exception:
+            pass
+
+
+def compute_figure_size(
+    *,
+    roi: Roi,
+    base_short: float = 6.0,
+    min_side: float = 3.5,
+    max_side: float = 12.0,
+    pad_x_inch: float = 0.4,
+    pad_y_inch: float = 0.4,
+    title_inch: float = 0.3,
+    cbar_width_inch: float = 0.3,
+    cbar_pad_inch: float = 0.1,
+) -> tuple[float, float]:
+    """
+    ROI のアスペクトと飾りの固定インチから figsize を計算する
+    """
+    w_data, h_data = figure_size_from_roi(
+        roi,
+        base_short=base_short,
+        min_side=min_side,
+        max_side=max_side,
+    )
+    # 左右・上下マージンを足し込む
+    w_total = w_data + 2 * pad_x_inch + cbar_pad_inch + cbar_width_inch
+    h_total = h_data + 2 * pad_y_inch + title_inch
+    return (w_total, h_total)
+
+
+def render_xy_value_map(
+    *,
+    fig,
+    ax,
+    x,
+    y,
+    vals,
+    roi: Roi,
+    cmap,
+    vmin: float,
+    vmax: float,
+    title: str,
+    show_ticks: bool,
+    show_frame: bool,
+    show_cbar: bool,
+    margin_pct: float = 0.0,
+):
+    """
+    プレビュー／出力共通の描画処理
+    """
+    # クリップ
+    from matplotlib.patches import Rectangle
+
+    width = max(float(roi.width), 1e-12)
+    height = max(float(roi.height), 1e-12)
+    clip_rect = Rectangle((0.0, 0.0), width, height, transform=ax.transData)
+
+    # pcolormesh
+    m = ax.pcolormesh(x, y, vals, cmap=cmap, vmin=vmin, vmax=vmax, shading="gouraud")
+    m.set_clip_path(clip_rect)
+
+    # オプション適用
+    _apply_plot_options(ax, show_ticks=show_ticks, show_frame=show_frame, margin_pct=margin_pct)
+
+    # タイトル
+    ax.set_title(title)
+
+    # 軸範囲
+    ax.set_xlim(0.0, width)
+    ax.set_ylim(0.0, height)
+    ax.set_aspect("equal", adjustable="box")
+
+    # カラーバー
+    if show_cbar:
+        try:
+            from mpl_toolkits.axes_grid1 import make_axes_locatable
+
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes("right", size="5%", pad=0.05)
+            fig.colorbar(m, cax=cax)
+        except Exception:
+            fig.colorbar(m, ax=ax, fraction=0.04, pad=0.01)
+
+    return m
 
 def export_xy_value_map_step(
     *,
@@ -63,7 +179,7 @@ def export_xy_value_map_step(
     vmax: float,
     dx: float = 1.0,
     dy: float = 1.0,
-    dpi: int = 150,
+    dpi: int = 100,
     show_title: bool = True,
     show_step: bool = True,
     show_time: bool = True,
@@ -71,6 +187,8 @@ def export_xy_value_map_step(
     show_ticks: bool = True,
     show_frame: bool = True,
     show_cbar: bool = True,
+    margin_pct: float = 0.0,
+    figsize: tuple[float, float] | None = None,
 ) -> Path:
     """
     指定した 1 ステップ分の X-Y 分布画像を出力する。
@@ -100,25 +218,14 @@ def export_xy_value_map_step(
 
     cmap = build_colormap(min_color, max_color)
 
-    # ROI の縦横比に合わせて figsize を固定
-    width = max(float(roi.width), 1e-12)
-    height = max(float(roi.height), 1e-12)
-    base_w = 8.0
-    base_h = base_w * (height / width)
-    base_h = min(max(base_h, 3.5), 12.0)
-    figsize = (base_w, base_h)
+    # プレビューと同じ figsize を使用（指定なければ ROI 比率から算出）
+    if figsize is None:
+        figsize = (6.0, 4.0)
 
     from matplotlib.figure import Figure
 
-    fig = Figure(figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig = Figure(figsize=figsize, dpi=dpi)
     ax = fig.add_subplot(111)
-    m = ax.pcolormesh(out_x, out_y, vals, cmap=cmap, vmin=vmin, vmax=vmax, shading="gouraud")
-    from matplotlib.patches import Rectangle
-
-    clip_rect = Rectangle((0.0, 0.0), width, height, transform=ax.transData)
-    m.set_clip_path(clip_rect)
-    if show_cbar:
-        fig.colorbar(m, ax=ax)
     title = _build_title(
         step=frame.step,
         t=frame.time,
@@ -128,11 +235,22 @@ def export_xy_value_map_step(
         show_time=show_time,
         show_value=show_value,
     )
-    ax.set_title(title)
-    _apply_plot_options(ax, show_ticks=show_ticks, show_frame=show_frame)
-    ax.set_xlim(0.0, width)
-    ax.set_ylim(0.0, height)
-    ax.set_aspect("equal", adjustable="box")
+    render_xy_value_map(
+        fig=fig,
+        ax=ax,
+        x=out_x,
+        y=out_y,
+        vals=vals,
+        roi=roi,
+        cmap=cmap,
+        vmin=vmin,
+        vmax=vmax,
+        title=title,
+        show_ticks=show_ticks,
+        show_frame=show_frame,
+        show_cbar=show_cbar,
+        margin_pct=margin_pct,
+    )
 
     digits = max(4, len(str(data_source.step_count)))
     out_path = output_dir / f"step_{frame.step:0{digits}d}.png"
@@ -153,7 +271,7 @@ def export_xy_value_maps(
     dx: float = 1.0,
     dy: float = 1.0,
     progress=None,
-    dpi: int = 150,
+    dpi: int = 100,
     show_title: bool = True,
     show_step: bool = True,
     show_time: bool = True,
@@ -161,6 +279,8 @@ def export_xy_value_maps(
     show_ticks: bool = True,
     show_frame: bool = True,
     show_cbar: bool = True,
+    margin_pct: float = 0.0,
+    figsize: tuple[float, float] | None = None,
 ) -> Path:
     """
     全ステップ分の X-Y 分布画像を出力する。
@@ -188,13 +308,11 @@ def export_xy_value_maps(
     total = data_source.step_count
     digits = max(4, len(str(total)))
 
-    # ROI の縦横比に合わせて figsize を固定（全ステップ同一）
+    # プレビューと同じ figsize を使用（全ステップ同一）。指定なければ固定サイズ。
     width = max(float(roi.width), 1e-12)
     height = max(float(roi.height), 1e-12)
-    base_w = 8.0
-    base_h = base_w * (height / width)
-    base_h = min(max(base_h, 3.5), 12.0)
-    figsize = (base_w, base_h)
+    if figsize is None:
+        figsize = (6.0, 4.0)
 
     from matplotlib.figure import Figure
 
@@ -227,15 +345,8 @@ def export_xy_value_maps(
             logger.info("Skip step=%s: ROI内のValueが全てNaN/Infです", frame.step)
             continue
 
-        fig = Figure(figsize=figsize, dpi=dpi, constrained_layout=True)
+        fig = Figure(figsize=figsize, dpi=dpi)
         ax = fig.add_subplot(111)
-        m = ax.pcolormesh(out_x, out_y, vals, cmap=cmap, vmin=vmin, vmax=vmax, shading="gouraud")
-        from matplotlib.patches import Rectangle
-
-        clip_rect = Rectangle((0.0, 0.0), width, height, transform=ax.transData)
-        m.set_clip_path(clip_rect)
-        if show_cbar:
-            fig.colorbar(m, ax=ax)
         title = _build_title(
             step=frame.step,
             t=frame.time,
@@ -245,11 +356,22 @@ def export_xy_value_maps(
             show_time=show_time,
             show_value=show_value,
         )
-        ax.set_title(title)
-        _apply_plot_options(ax, show_ticks=show_ticks, show_frame=show_frame)
-        ax.set_xlim(0.0, width)
-        ax.set_ylim(0.0, height)
-        ax.set_aspect("equal", adjustable="box")
+        render_xy_value_map(
+            fig=fig,
+            ax=ax,
+            x=out_x,
+            y=out_y,
+            vals=vals,
+            roi=roi,
+            cmap=cmap,
+            vmin=vmin,
+            vmax=vmax,
+            title=title,
+            show_ticks=show_ticks,
+            show_frame=show_frame,
+            show_cbar=show_cbar,
+            margin_pct=margin_pct,
+        )
 
         out_path = output_dir / f"step_{frame.step:0{digits}d}.png"
         fig.savefig(out_path)

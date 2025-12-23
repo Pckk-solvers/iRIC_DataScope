@@ -13,7 +13,12 @@ from tkinter import colorchooser, messagebox, ttk
 
 import numpy as np
 
-from .main import export_xy_value_map_step, export_xy_value_maps
+from .main import (
+    export_xy_value_map_step,
+    export_xy_value_maps,
+    figure_size_from_roi,
+    render_xy_value_map,
+)
 from .processor import (
     DataSource,
     Roi,
@@ -101,6 +106,7 @@ class XYValueMapGUI(tk.Toplevel):
         self._scale_ratio: tuple[float, float] = (0.0, 1.0)
         self._output_opts_lock = False
         self._roi_confirmed = False
+        self._figsize: tuple[float, float] = (6.0, 4.0)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_menu()
@@ -397,11 +403,18 @@ class XYValueMapGUI(tk.Toplevel):
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
         from matplotlib.figure import Figure
 
-        self.preview_fig = Figure(figsize=(6, 4), dpi=100)
+        self.preview_fig = Figure(figsize=self._figsize, dpi=100)
         self.preview_ax = self.preview_fig.add_subplot(111)
 
         self.preview_canvas = FigureCanvasTkAgg(self.preview_fig, master=parent)
-        self.preview_canvas.get_tk_widget().pack(fill="both", expand=True)
+        widget = self.preview_canvas.get_tk_widget()
+        widget.pack(fill="both", expand=True)
+        widget.update_idletasks()
+        try:
+            widget.configure(background="#f5f5f5")
+        except Exception:
+            pass
+        widget.bind("<Configure>", lambda e: self._on_preview_configure())
 
         self.mesh = None
         self.cbar = None
@@ -602,9 +615,78 @@ class XYValueMapGUI(tk.Toplevel):
             "show_ticks": bool(self.show_ticks_var.get()),
             "show_frame": bool(self.show_frame_var.get()),
             "show_cbar": bool(self.show_cbar_var.get()),
-            "cbar_width": 0.04,
-            "cbar_pad": 0.02,
+            "margin_pct": 0.0,
+            "figsize": tuple(self._figsize),
         }
+
+    def _set_preview_figsize(self, figsize: tuple[float, float]):
+        """Update preview figure size if changed and keep the latest size."""
+        try:
+            cur_w, cur_h = self.preview_fig.get_size_inches()
+        except Exception:
+            cur_w, cur_h = None, None
+        if (
+            cur_w is None
+            or cur_h is None
+            or abs(cur_w - figsize[0]) > 1e-3
+            or abs(cur_h - figsize[1]) > 1e-3
+        ):
+            try:
+                self.preview_fig.set_size_inches(*figsize, forward=True)
+            except Exception:
+                pass
+        self._figsize = tuple(figsize)
+
+    def _fit_figsize_to_preview_frame(self, figsize: tuple[float, float]) -> tuple[float, float]:
+        """Scale figsize to fit the preview Tk widget while keeping aspect."""
+        try:
+            widget = self.preview_canvas.get_tk_widget()
+            avail_w = max(widget.winfo_width(), 1)
+            avail_h = max(widget.winfo_height(), 1)
+        except Exception:
+            return figsize
+        dpi = float(self.preview_fig.get_dpi()) if self.preview_fig is not None else 100.0
+        fw, fh = figsize
+        if fw <= 0 or fh <= 0 or dpi <= 0:
+            return figsize
+        if avail_w < 100 or avail_h < 100:
+            return figsize
+        aspect = fh / fw if fw > 0 else 1.0
+        if not np.isfinite(aspect) or aspect <= 0:
+            aspect = 1.0
+        # ピクセルベースで収まる最大サイズ（短辺を優先して両辺が収まるように）
+        width_px = min(avail_w, avail_h / aspect)
+        height_px = width_px * aspect
+        if width_px <= 0 or height_px <= 0:
+            return figsize
+        # 中央寄せ用に余白を覚えておく
+        self._preview_pad_px = (
+            max((avail_w - width_px) / 2.0, 0.0),
+            max((avail_h - height_px) / 2.0, 0.0),
+        )
+        return (width_px / dpi, height_px / dpi)
+
+    def _on_preview_configure(self):
+        """ウィジェットサイズ変更時に画像を中央に寄せるため再配置"""
+        try:
+            widget = self.preview_canvas.get_tk_widget()
+            avail_w = max(widget.winfo_width(), 1)
+            avail_h = max(widget.winfo_height(), 1)
+        except Exception:
+            return
+        # pad px を設定
+        try:
+            _, height = self.preview_fig.get_size_inches()
+            dpi = self.preview_fig.get_dpi()
+            fig_h_px = height * dpi
+        except Exception:
+            fig_h_px = 0
+        pad_x, pad_y = getattr(self, "_preview_pad_px", (0.0, 0.0))
+        # pack の内部パディングでセンタリング（X方向のみ）
+        try:
+            widget.pack_configure(padx=int(pad_x), pady=int(pad_y))
+        except Exception:
+            pass
 
     def _set_manual_scale_vars(self, vmin: float, vmax: float):
         self._scale_var_lock = True
@@ -808,6 +890,10 @@ class XYValueMapGUI(tk.Toplevel):
                 self.step_var.set(step)
             finally:
                 self._step_var_lock = False
+
+        # figsize は固定値をウィジェットにフィットさせたものを使用（固定運用）
+        fitted_figsize = self._fit_figsize_to_preview_frame(self._figsize)
+        self._set_preview_figsize(fitted_figsize)
 
         output_opts = self._get_output_options()
 
@@ -1736,12 +1822,7 @@ class XYValueMapGUI(tk.Toplevel):
         *,
         title: str = "No points in ROI",
     ):
-        if self.mesh is not None:
-            try:
-                self.mesh.remove()
-            except Exception:
-                pass
-            self.mesh = None
+        self._reset_preview_axes()
         opts = output_opts or self._last_output_opts or {}
         self._apply_plot_options(ax=self.preview_ax, mesh=None, output_opts=opts)
         title = title if opts.get("show_title", True) else ""
@@ -1771,47 +1852,47 @@ class XYValueMapGUI(tk.Toplevel):
         vmax: float,
         output_opts: dict[str, object],
     ):
-        if self.mesh is not None:
-            try:
-                self.mesh.remove()
-            except Exception:
-                pass
-            self.mesh = None
-        self.mesh = self.preview_ax.pcolormesh(
-            x,
-            y,
-            vals,
+        self._reset_preview_axes()
+        title = self._build_plot_title(step=step, t=t, value_col=value_col, output_opts=output_opts)
+        self.mesh = render_xy_value_map(
+            fig=self.preview_fig,
+            ax=self.preview_ax,
+            x=x,
+            y=y,
+            vals=vals,
+            roi=roi,
             cmap=cmap,
             vmin=vmin,
             vmax=vmax,
-            shading="gouraud",
+            title=title,
+            show_ticks=output_opts.get("show_ticks", True),
+            show_frame=output_opts.get("show_frame", True),
+            show_cbar=output_opts.get("show_cbar", True),
+            margin_pct=output_opts.get("margin_pct", 0.0),
         )
-        from matplotlib.patches import Rectangle
-
-        width = max(float(roi.width), 1e-12)
-        height = max(float(roi.height), 1e-12)
-        clip_rect = Rectangle(
-            (0.0, 0.0),
-            width,
-            height,
-            transform=self.preview_ax.transData,
-        )
-        self.mesh.set_clip_path(clip_rect)
-        self._apply_plot_options(
-            ax=self.preview_ax,
-            mesh=self.mesh,
-            output_opts=output_opts,
-        )
-
-        title = self._build_plot_title(step=step, t=t, value_col=value_col, output_opts=output_opts)
-        if title:
-            self.preview_ax.set_title(title)
-        else:
-            self.preview_ax.set_title("")
-        self.preview_ax.set_xlim(0.0, width)
-        self.preview_ax.set_ylim(0.0, height)
-        self.preview_ax.set_aspect("equal", adjustable="box")
         self.preview_canvas.draw_idle()
+
+    def _reset_preview_axes(self):
+        """Clear preview axes and colorbar to avoid leftover artists/clipping."""
+        try:
+            face = self.preview_fig.get_facecolor()
+        except Exception:
+            face = None
+        try:
+            self.preview_fig.clf()
+        except Exception:
+            pass
+        try:
+            self.preview_ax = self.preview_fig.add_subplot(111)
+        except Exception:
+            pass
+        if face is not None:
+            try:
+                self.preview_fig.patch.set_facecolor(face)
+            except Exception:
+                pass
+        self.cbar = None
+        self.mesh = None
 
     def _build_plot_title(self, *, step: int, t: float, value_col: str, output_opts: dict[str, object]) -> str:
         if not output_opts.get("show_title", True):
@@ -1829,6 +1910,8 @@ class XYValueMapGUI(tk.Toplevel):
         show_ticks = bool(output_opts.get("show_ticks", True))
         show_frame = bool(output_opts.get("show_frame", True))
         show_cbar = bool(output_opts.get("show_cbar", True))
+        margin_pct = float(output_opts.get("margin_pct", 0.0))
+        margin_pct = min(max(margin_pct, 0.0), 50.0)
 
         ax.tick_params(
             bottom=show_ticks,
@@ -1841,32 +1924,50 @@ class XYValueMapGUI(tk.Toplevel):
             spine.set_visible(show_frame)
 
         if show_cbar:
-            if mesh is None:
-                if self.cbar is not None:
-                    try:
-                        self.cbar.ax.set_visible(False)
-                    except Exception:
-                        pass
-                return
-            if self.cbar is None:
-                self.cbar = self.preview_fig.colorbar(
-                    mesh,
-                    ax=ax,
-                    fraction=0.04,
-                    pad=0.02,
-                )
-            else:
+            # 既存カラーバーを掃除してから作り直す
+            if self.cbar is not None:
                 try:
-                    self.cbar.ax.set_visible(True)
+                    self.cbar.remove()
                 except Exception:
                     pass
-                self.cbar.update_normal(mesh)
+                self.cbar = None
+            if mesh is None:
+                return
+            try:
+                bbox = ax.get_position()
+                cb_width = 0.03
+                cb_pad = 0.005
+                cax = self.preview_fig.add_axes(
+                    [
+                        bbox.x1 + cb_pad,
+                        bbox.y0,
+                        cb_width,
+                        bbox.height,
+                    ]
+                )
+                self.cbar = self.preview_fig.colorbar(mesh, cax=cax)
+            except Exception:
+                self.cbar = None
         else:
             if self.cbar is not None:
                 try:
-                    self.cbar.ax.set_visible(False)
+                    self.cbar.remove()
                 except Exception:
                     pass
+                self.cbar = None
+
+        # マージン%適用のみ（中央寄せはデフォルト配置に任せ、テキストの見切れを避ける）
+        if margin_pct > 0.0:
+            m = margin_pct / 100.0
+            m = min(max(m, 0.0), 0.5)
+            left = m
+            right = 1.0 - m
+            bottom = m
+            top = 1.0 - m
+            try:
+                ax.figure.subplots_adjust(left=left, right=right, bottom=bottom, top=top)
+            except Exception:
+                pass
 
     def _get_preview_frame(self, step: int, value_col: str):
         key = (step, value_col)
@@ -2009,6 +2110,8 @@ class XYValueMapGUI(tk.Toplevel):
                 show_ticks=output_opts["show_ticks"],
                 show_frame=output_opts["show_frame"],
                 show_cbar=output_opts["show_cbar"],
+                margin_pct=output_opts["margin_pct"],
+                figsize=output_opts["figsize"],
                 progress=progress,
             )
         except Exception as e:
@@ -2126,6 +2229,8 @@ class XYValueMapGUI(tk.Toplevel):
                 show_ticks=output_opts["show_ticks"],
                 show_frame=output_opts["show_frame"],
                 show_cbar=output_opts["show_cbar"],
+                margin_pct=output_opts["margin_pct"],
+                figsize=output_opts["figsize"],
             )
         except Exception as e:
             logger.exception("このステップのみ出力に失敗しました")
