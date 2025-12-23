@@ -18,6 +18,38 @@ from .processor import (
 logger = logging.getLogger(__name__)
 
 
+def _build_title(
+    *,
+    step: int,
+    t: float,
+    value_col: str,
+    show_title: bool,
+    show_step: bool,
+    show_time: bool,
+    show_value: bool,
+) -> str:
+    if not show_title:
+        return ""
+    parts: list[str] = []
+    if show_step:
+        parts.append(f"step={step}")
+    if show_time:
+        parts.append(f"t={t:g}")
+    if show_value:
+        parts.append(f"value={value_col}")
+    return "  ".join(parts)
+
+
+def _apply_plot_options(ax, *, show_ticks: bool, show_frame: bool):
+    ax.tick_params(
+        bottom=show_ticks,
+        left=show_ticks,
+        labelbottom=show_ticks,
+        labelleft=show_ticks,
+    )
+    for spine in ax.spines.values():
+        spine.set_visible(show_frame)
+
 def export_xy_value_map_step(
     *,
     data_source: DataSource,
@@ -29,15 +61,21 @@ def export_xy_value_map_step(
     max_color: str,
     vmin: float,
     vmax: float,
-    rotation_deg: float = 0.0,
     dx: float = 1.0,
     dy: float = 1.0,
     dpi: int = 150,
+    show_title: bool = True,
+    show_step: bool = True,
+    show_time: bool = True,
+    show_value: bool = True,
+    show_ticks: bool = True,
+    show_frame: bool = True,
+    show_cbar: bool = True,
 ) -> Path:
     """
     指定した 1 ステップ分の X-Y 分布画像を出力する。
 
-    回転角度と dx/dy を反映して I/J 補間後に描画する。
+    ROI の角度と dx/dy を反映して I/J 補間後に描画する。
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -48,9 +86,9 @@ def export_xy_value_map_step(
         y,
         v,
         roi=roi,
-        rotation_deg=rotation_deg,
         dx=dx,
         dy=dy,
+        local_origin=True,
     )
     if prepared is None:
         raise ValueError("ROI 内に点がありません。")
@@ -63,10 +101,10 @@ def export_xy_value_map_step(
     cmap = build_colormap(min_color, max_color)
 
     # ROI の縦横比に合わせて figsize を固定
-    x_span = max(roi.xmax - roi.xmin, 1e-12)
-    y_span = max(roi.ymax - roi.ymin, 1e-12)
+    width = max(float(roi.width), 1e-12)
+    height = max(float(roi.height), 1e-12)
     base_w = 8.0
-    base_h = base_w * (y_span / x_span)
+    base_h = base_w * (height / width)
     base_h = min(max(base_h, 3.5), 12.0)
     figsize = (base_w, base_h)
 
@@ -77,17 +115,23 @@ def export_xy_value_map_step(
     m = ax.pcolormesh(out_x, out_y, vals, cmap=cmap, vmin=vmin, vmax=vmax, shading="gouraud")
     from matplotlib.patches import Rectangle
 
-    clip_rect = Rectangle(
-        (roi.xmin, roi.ymin),
-        roi.xmax - roi.xmin,
-        roi.ymax - roi.ymin,
-        transform=ax.transData,
-    )
+    clip_rect = Rectangle((0.0, 0.0), width, height, transform=ax.transData)
     m.set_clip_path(clip_rect)
-    fig.colorbar(m, ax=ax)
-    ax.set_title(f"step={frame.step}  t={frame.time:g}  value={value_col}")
-    ax.set_xlim(roi.xmin, roi.xmax)
-    ax.set_ylim(roi.ymin, roi.ymax)
+    if show_cbar:
+        fig.colorbar(m, ax=ax)
+    title = _build_title(
+        step=frame.step,
+        t=frame.time,
+        value_col=value_col,
+        show_title=show_title,
+        show_step=show_step,
+        show_time=show_time,
+        show_value=show_value,
+    )
+    ax.set_title(title)
+    _apply_plot_options(ax, show_ticks=show_ticks, show_frame=show_frame)
+    ax.set_xlim(0.0, width)
+    ax.set_ylim(0.0, height)
     ax.set_aspect("equal", adjustable="box")
 
     digits = max(4, len(str(data_source.step_count)))
@@ -106,17 +150,23 @@ def export_xy_value_maps(
     max_color: str,
     scale_mode: Literal["global", "manual"] = "global",
     manual_scale: tuple[float, float] | None = None,
-    rotation_deg: float = 0.0,
     dx: float = 1.0,
     dy: float = 1.0,
     progress=None,
     dpi: int = 150,
+    show_title: bool = True,
+    show_step: bool = True,
+    show_time: bool = True,
+    show_value: bool = True,
+    show_ticks: bool = True,
+    show_frame: bool = True,
+    show_cbar: bool = True,
 ) -> Path:
     """
     全ステップ分の X-Y 分布画像を出力する。
 
     ROI 内が空の場合はそのステップをスキップし、ログに残す。
-    回転角度と dx/dy を反映して I/J 補間後に描画する。
+    ROI の角度と dx/dy を反映して I/J 補間後に描画する。
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
@@ -131,7 +181,6 @@ def export_xy_value_maps(
             data_source,
             value_col=value_col,
             roi=roi,
-            rotation_deg=rotation_deg,
             dx=dx,
             dy=dy,
         )
@@ -140,10 +189,10 @@ def export_xy_value_maps(
     digits = max(4, len(str(total)))
 
     # ROI の縦横比に合わせて figsize を固定（全ステップ同一）
-    x_span = max(roi.xmax - roi.xmin, 1e-12)
-    y_span = max(roi.ymax - roi.ymin, 1e-12)
+    width = max(float(roi.width), 1e-12)
+    height = max(float(roi.height), 1e-12)
     base_w = 8.0
-    base_h = base_w * (y_span / x_span)
+    base_h = base_w * (height / width)
     base_h = min(max(base_h, 3.5), 12.0)
     figsize = (base_w, base_h)
 
@@ -162,9 +211,9 @@ def export_xy_value_maps(
                 y,
                 v,
                 roi=roi,
-                rotation_deg=rotation_deg,
                 dx=dx,
                 dy=dy,
+                local_origin=True,
             )
             if prepared is None:
                 logger.info("Skip step=%s: ROI内に点がありません", frame.step)
@@ -183,17 +232,23 @@ def export_xy_value_maps(
         m = ax.pcolormesh(out_x, out_y, vals, cmap=cmap, vmin=vmin, vmax=vmax, shading="gouraud")
         from matplotlib.patches import Rectangle
 
-        clip_rect = Rectangle(
-            (roi.xmin, roi.ymin),
-            roi.xmax - roi.xmin,
-            roi.ymax - roi.ymin,
-            transform=ax.transData,
-        )
+        clip_rect = Rectangle((0.0, 0.0), width, height, transform=ax.transData)
         m.set_clip_path(clip_rect)
-        fig.colorbar(m, ax=ax)
-        ax.set_title(f"step={frame.step}  t={frame.time:g}  value={value_col}")
-        ax.set_xlim(roi.xmin, roi.xmax)
-        ax.set_ylim(roi.ymin, roi.ymax)
+        if show_cbar:
+            fig.colorbar(m, ax=ax)
+        title = _build_title(
+            step=frame.step,
+            t=frame.time,
+            value_col=value_col,
+            show_title=show_title,
+            show_step=show_step,
+            show_time=show_time,
+            show_value=show_value,
+        )
+        ax.set_title(title)
+        _apply_plot_options(ax, show_ticks=show_ticks, show_frame=show_frame)
+        ax.set_xlim(0.0, width)
+        ax.set_ylim(0.0, height)
         ax.set_aspect("equal", adjustable="box")
 
         out_path = output_dir / f"step_{frame.step:0{digits}d}.png"
