@@ -224,7 +224,7 @@ def export_xy_value_map_step(
 
     from matplotlib.figure import Figure
 
-    fig = Figure(figsize=figsize, dpi=dpi)
+    fig = Figure(figsize=figsize, dpi=dpi, constrained_layout=True)
     ax = fig.add_subplot(111)
     title = _build_title(
         step=frame.step,
@@ -254,7 +254,7 @@ def export_xy_value_map_step(
 
     digits = max(4, len(str(data_source.step_count)))
     out_path = output_dir / f"step_{frame.step:0{digits}d}.png"
-    fig.savefig(out_path)
+    fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
     return out_path
 
 
@@ -345,7 +345,7 @@ def export_xy_value_maps(
             logger.info("Skip step=%s: ROI内のValueが全てNaN/Infです", frame.step)
             continue
 
-        fig = Figure(figsize=figsize, dpi=dpi)
+        fig = Figure(figsize=figsize, dpi=dpi, constrained_layout=True)
         ax = fig.add_subplot(111)
         title = _build_title(
             step=frame.step,
@@ -374,7 +374,7 @@ def export_xy_value_maps(
         )
 
         out_path = output_dir / f"step_{frame.step:0{digits}d}.png"
-        fig.savefig(out_path)
+        fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
 
     if progress is not None:
         progress.update(current=total, total=total, text="完了")

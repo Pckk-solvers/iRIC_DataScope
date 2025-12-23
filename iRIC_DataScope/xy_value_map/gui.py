@@ -248,6 +248,7 @@ class XYValueMapGUI(tk.Toplevel):
         ttk.Checkbutton(opt_frame, text="枠線", variable=self.show_frame_var, command=self._on_output_option_changed).grid(row=1, column=1, sticky="w", padx=6, pady=2)
         ttk.Checkbutton(opt_frame, text="カラーバー", variable=self.show_cbar_var, command=self._on_output_option_changed).grid(row=1, column=2, sticky="w", padx=6, pady=2)
 
+
         # 解像度
         ttk.Label(self, text="解像度倍率:").grid(row=8, column=0, sticky="e", **pad)
         self.resolution_var = tk.DoubleVar(value=1.0)
@@ -403,7 +404,7 @@ class XYValueMapGUI(tk.Toplevel):
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
         from matplotlib.figure import Figure
 
-        self.preview_fig = Figure(figsize=self._figsize, dpi=100)
+        self.preview_fig = Figure(figsize=self._figsize, dpi=100, constrained_layout=True)
         self.preview_ax = self.preview_fig.add_subplot(111)
 
         self.preview_canvas = FigureCanvasTkAgg(self.preview_fig, master=parent)
@@ -651,20 +652,22 @@ class XYValueMapGUI(tk.Toplevel):
             return figsize
         if avail_w < 100 or avail_h < 100:
             return figsize
-        aspect = fh / fw if fw > 0 else 1.0
-        if not np.isfinite(aspect) or aspect <= 0:
-            aspect = 1.0
-        # ピクセルベースで収まる最大サイズ（短辺を優先して両辺が収まるように）
-        width_px = min(avail_w, avail_h / aspect)
-        height_px = width_px * aspect
-        if width_px <= 0 or height_px <= 0:
+        fig_w_px = fw * dpi
+        fig_h_px = fh * dpi
+        if fig_w_px <= 0 or fig_h_px <= 0:
+            return figsize
+        # 縮小のみ（拡大はしない）
+        scale = min(avail_w / fig_w_px, avail_h / fig_h_px, 1.0)
+        scaled_w_px = fig_w_px * scale
+        scaled_h_px = fig_h_px * scale
+        if scaled_w_px <= 0 or scaled_h_px <= 0:
             return figsize
         # 中央寄せ用に余白を覚えておく
         self._preview_pad_px = (
-            max((avail_w - width_px) / 2.0, 0.0),
-            max((avail_h - height_px) / 2.0, 0.0),
+            max((avail_w - scaled_w_px) / 2.0, 0.0),
+            max((avail_h - scaled_h_px) / 2.0, 0.0),
         )
-        return (width_px / dpi, height_px / dpi)
+        return (scaled_w_px / dpi, scaled_h_px / dpi)
 
     def _on_preview_configure(self):
         """ウィジェットサイズ変更時に画像を中央に寄せるため再配置"""
@@ -891,7 +894,7 @@ class XYValueMapGUI(tk.Toplevel):
             finally:
                 self._step_var_lock = False
 
-        # figsize は固定値をウィジェットにフィットさせたものを使用（固定運用）
+        # figsize は固定値を枠内に収まるよう縮小のみ適用
         fitted_figsize = self._fit_figsize_to_preview_frame(self._figsize)
         self._set_preview_figsize(fitted_figsize)
 
