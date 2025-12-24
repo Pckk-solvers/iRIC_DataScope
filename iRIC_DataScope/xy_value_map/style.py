@@ -17,17 +17,69 @@ def ensure_japanese_font():
         return
     from matplotlib import font_manager, rcParams
 
-    candidates = ["Yu Gothic", "Yu Gothic UI", "Meiryo", "MS Gothic", "Noto Sans CJK JP"]
+    candidates = [
+        "Yu Gothic UI",
+        "Yu Gothic",
+        "Meiryo",
+        "MS UI Gothic",
+        "MS Gothic",
+        "Noto Sans CJK JP",
+        "Noto Sans JP",
+    ]
     for name in candidates:
         try:
             path = font_manager.findfont(name, fallback_to_default=False)
-            if path:
-                rcParams["font.family"] = name
-                rcParams["axes.unicode_minus"] = False
-                _JP_FONT_SET = True
-                return
         except Exception:
-            continue
+            path = None
+        if path:
+            try:
+                font_manager.fontManager.addfont(path)
+            except Exception:
+                pass
+            try:
+                font_name = font_manager.FontProperties(fname=path).get_name()
+            except Exception:
+                font_name = name
+            rcParams["font.family"] = font_name
+            rcParams["axes.unicode_minus"] = False
+            _JP_FONT_SET = True
+            return
+
+    try:
+        for path in font_manager.findSystemFonts(fontext="ttf"):
+            lower = path.lower()
+            if any(
+                key in lower
+                for key in (
+                    "yugoth",
+                    "meiryo",
+                    "msgothic",
+                    "ms gothic",
+                    "msuigothic",
+                    "noto sans cjk",
+                    "notosanscjk",
+                    "noto sans jp",
+                    "notosansjp",
+                    "ipaexg",
+                    "ipag",
+                )
+            ):
+                try:
+                    font_manager.fontManager.addfont(path)
+                except Exception:
+                    pass
+                try:
+                    font_name = font_manager.FontProperties(fname=path).get_name()
+                except Exception:
+                    font_name = None
+                if font_name:
+                    rcParams["font.family"] = font_name
+                    rcParams["axes.unicode_minus"] = False
+                    _JP_FONT_SET = True
+                    return
+    except Exception:
+        pass
+
     rcParams["axes.unicode_minus"] = False
     _JP_FONT_SET = True
 

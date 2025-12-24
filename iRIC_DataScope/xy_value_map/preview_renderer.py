@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from .options import OutputOptions
 from .plot import render_xy_value_map
+from .style import ensure_japanese_font
 from .processor import Roi
 
 
@@ -121,6 +122,7 @@ class PreviewRenderer:
         title: str = "No points in ROI",
     ):
         """ROI内に点がない場合のダミー描画。"""
+        ensure_japanese_font()
         self.reset_axes()
         self.apply_plot_options(mesh=None, output_opts=output_opts)
         title = title if output_opts.show_title else ""
