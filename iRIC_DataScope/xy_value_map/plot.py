@@ -102,6 +102,10 @@ def render_xy_value_map(
     ax.set_xlim(0.0, width)
     ax.set_ylim(0.0, height)
     ax.set_aspect("equal", adjustable="box")
+    try:
+        ax.set_anchor("C")
+    except Exception:
+        pass
 
     # カラーバー
     if show_cbar:
@@ -116,12 +120,26 @@ def render_xy_value_map(
 
         if cbar_label:
             try:
-                cb.ax.set_ylabel(cbar_label, fontsize=cbar_label_font_size, rotation=270, labelpad=10)
+                label_fs = cbar_label_font_size
+                if label_fs is None:
+                    label_fs = tick_font_size
+                if label_fs is None:
+                    label_fs = 10.0
+                labelpad = max(10.0, float(label_fs) * 1.2)
+                cb.ax.set_ylabel(
+                    cbar_label,
+                    fontsize=cbar_label_font_size,
+                    rotation=270,
+                    labelpad=labelpad,
+                )
+                cb.ax.yaxis.set_label_position("right")
+                cb.ax.yaxis.set_ticks_position("right")
             except Exception:
                 pass
         if tick_font_size is not None:
             try:
-                cb.ax.tick_params(labelsize=tick_font_size)
+                tick_pad = max(2.0, float(tick_font_size) * 0.2)
+                cb.ax.tick_params(labelsize=tick_font_size, pad=tick_pad)
             except Exception:
                 pass
 

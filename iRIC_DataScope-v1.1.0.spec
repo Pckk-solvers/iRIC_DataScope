@@ -1,19 +1,22 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.utils.hooks import collect_submodules
 
 datas = [('iRIC_DataScope', 'iRIC_DataScope')]
-binaries = []
-hiddenimports = ['tkinter.ttk', 'tkinter.messagebox', 'tkinter.filedialog', 'logging.handlers', 'xlsxwriter']
-tmp_ret = collect_all('pandas')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
-tmp_ret = collect_all('h5py')
-datas += tmp_ret[0]; binaries += tmp_ret[1]; hiddenimports += tmp_ret[2]
+hiddenimports = ['logging.handlers', 'tkinter.ttk', 'tkinter.filedialog', 'tkinter.messagebox', 'matplotlib.backends.backend_tkagg']
+datas += collect_data_files('matplotlib')
+hiddenimports += collect_submodules('pandas')
+hiddenimports += collect_submodules('numpy')
+hiddenimports += collect_submodules('scipy')
+hiddenimports += collect_submodules('h5py')
+hiddenimports += collect_submodules('openpyxl')
+hiddenimports += collect_submodules('xlsxwriter')
 
 
 a = Analysis(
     ['iRIC_DataScope\\app.py'],
     pathex=[],
-    binaries=binaries,
+    binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
     hookspath=[],
@@ -31,7 +34,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='iRIC_DataScope-v1.0.4',
+    name='iRIC_DataScope-v1.1.0',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

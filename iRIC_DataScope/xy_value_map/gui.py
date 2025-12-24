@@ -25,7 +25,7 @@ from .options import OutputOptions
 from .preview_renderer import PreviewRenderer
 from .state import GuiState
 from .tasks import GlobalScaleWorker
-from .ui import UIBuilder
+from .left_panel import LeftPanelBuilder
 from .style import (
     DEFAULT_CBAR_LABEL_FONT_SIZE,
     DEFAULT_TICK_FONT_SIZE,
@@ -83,12 +83,19 @@ class XYValueMapGUI(tk.Toplevel):
         self._edit_outline_id = None
         self._edit_canvas_mgr: EditCanvasManager | None = None
         self._preview_renderer: PreviewRenderer | None = None
+        self._preview_last_size: tuple[int, int] | None = None
         self._roi_patch = None
         self._roi_bottom_edge = None
         self._roi_rotate_line = None
         self._roi_handles: list[dict[str, object]] = []
         self._figsize: tuple[float, float] = (6.0, 4.0)
         self._tight_rect = None
+        self._right_frame: ttk.Frame | None = None
+        self._preview_height_px: int | None = None
+        self._roi_frame: ttk.LabelFrame | None = None
+        self._edit_canvas_frame: ttk.Frame | None = None
+        self._export_slider_lock = False
+        self._export_var_lock = False
         self.controller = XYValueMapController(self)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
@@ -111,102 +118,21 @@ class XYValueMapGUI(tk.Toplevel):
         self.bind_all("<Alt-h>", lambda e: webbrowser.open(MANUAL_URL))
 
     def _build_ui(self):
-        pad = {"padx": 8, "pady": 4}
+        # 左側パネルを構築
+        left_frame = ttk.Frame(self)
+        left_frame.grid(row=0, column=0, rowspan=12, sticky="nsew", padx=8, pady=8)
+        ttk.Style(self).configure("Hint.TLabel", foreground="#666666")
 
-        # 入力/出力パス（readonly）
-        ttk.Label(self, text="入力:").grid(row=0, column=0, sticky="e", **pad)
         self.input_var = tk.StringVar(value=str(self.input_path))
-        ttk.Entry(self, textvariable=self.input_var, width=60, state="readonly").grid(
-            row=0, column=1, columnspan=5, sticky="ew", **pad
-        )
-        ttk.Label(self, text="出力:").grid(row=1, column=0, sticky="e", **pad)
         self.output_var = tk.StringVar(value=str(self.output_dir))
-        ttk.Entry(self, textvariable=self.output_var, width=60, state="readonly").grid(
-            row=1, column=1, columnspan=5, sticky="ew", **pad
-        )
-
-        # Value 変数
-        ttk.Label(self, text="Value:").grid(row=2, column=0, sticky="e", **pad)
         self.value_var = tk.StringVar()
-        self.value_combo = ttk.Combobox(self, textvariable=self.value_var, state="readonly", width=30)
-        self.value_combo.grid(row=2, column=1, sticky="w", **pad)
-        self.value_combo.bind("<<ComboboxSelected>>", lambda e: self._on_value_changed())
-
-        # プレビュー対象ステップ
-        ttk.Label(self, text="プレビュー step:").grid(row=2, column=2, sticky="e", **pad)
         self.step_var = tk.IntVar(value=1)
-        self.step_spin = tk.Spinbox(self, from_=1, to=max(1, self._step_count), textvariable=self.step_var, width=8, command=self._on_step_changed)
-        self.step_spin.grid(row=2, column=3, sticky="w", **pad)
-        self.step_var.trace_add("write", lambda *_: self._on_step_changed())
-
-        # ROI
-        ttk.Label(self, text="ROI (Cx/Cy/W/H/Angle):").grid(row=3, column=0, sticky="e", **pad)
-        self.cx_var = tk.DoubleVar()
-        self.cy_var = tk.DoubleVar()
-        self.width_var = tk.DoubleVar()
-        self.height_var = tk.DoubleVar()
-        self.angle_var = tk.DoubleVar()
-        self.cx_entry = ttk.Entry(self, textvariable=self.cx_var, width=10)
-        self.cy_entry = ttk.Entry(self, textvariable=self.cy_var, width=10)
-        self.width_entry = ttk.Entry(self, textvariable=self.width_var, width=10)
-        self.height_entry = ttk.Entry(self, textvariable=self.height_var, width=10)
-        self.angle_entry = ttk.Entry(self, textvariable=self.angle_var, width=10)
-        self.cx_entry.grid(row=3, column=1, sticky="w", **pad)
-        self.cy_entry.grid(row=3, column=2, sticky="w", **pad)
-        self.width_entry.grid(row=3, column=3, sticky="w", **pad)
-        self.height_entry.grid(row=3, column=4, sticky="w", **pad)
-        self.angle_entry.grid(row=3, column=5, sticky="w", **pad)
-        self.reset_roi_btn = ttk.Button(self, text="全体表示", command=self._reset_roi_to_full)
-        self.reset_roi_btn.grid(row=3, column=6, sticky="w", **pad)
-
-        for var in (self.cx_var, self.cy_var, self.width_var, self.height_var, self.angle_var):
-            var.trace_add("write", lambda *_: self._on_roi_changed())
-        for entry in (self.cx_entry, self.cy_entry, self.width_entry, self.height_entry, self.angle_entry):
-            entry.bind("<Return>", self._on_roi_entry_confirm)
-            entry.bind("<FocusOut>", self._on_roi_entry_confirm)
-
-        # 色（最小/最大）
-        ttk.Label(self, text="最小色:").grid(row=4, column=0, sticky="e", **pad)
         self.min_color_var = tk.StringVar(value="#0000ff")
-        self.min_color_btn = ttk.Button(self, text="選択", command=lambda: self._choose_color(self.min_color_var))
-        self.min_color_btn.grid(row=4, column=1, sticky="w", **pad)
-        self.min_color_sample = tk.Label(self, width=6, background=self.min_color_var.get())
-        self.min_color_sample.grid(row=4, column=2, sticky="w", **pad)
-
-        ttk.Label(self, text="最大色:").grid(row=4, column=3, sticky="e", **pad)
         self.max_color_var = tk.StringVar(value="#ff0000")
-        self.max_color_btn = ttk.Button(self, text="選択", command=lambda: self._choose_color(self.max_color_var))
-        self.max_color_btn.grid(row=4, column=4, sticky="w", **pad)
-        self.max_color_sample = tk.Label(self, width=6, background=self.max_color_var.get())
-        self.max_color_sample.grid(row=4, column=5, sticky="w", **pad)
-
-        self.min_color_var.trace_add("write", lambda *_: self._on_color_changed())
-        self.max_color_var.trace_add("write", lambda *_: self._on_color_changed())
-
-        # スケール
-        ttk.Label(self, text="スケール:").grid(row=5, column=0, sticky="e", **pad)
         self.scale_mode = tk.StringVar(value="global")
-        self.scale_global_radio = ttk.Radiobutton(self, text="global", value="global", variable=self.scale_mode, command=self._on_scale_mode_changed)
-        self.scale_manual_radio = ttk.Radiobutton(self, text="manual", value="manual", variable=self.scale_mode, command=self._on_scale_mode_changed)
-        self.scale_global_radio.grid(row=5, column=1, sticky="w", **pad)
-        self.scale_manual_radio.grid(row=5, column=2, sticky="w", **pad)
-
-        ttk.Label(self, text="vmin/vmax:").grid(row=5, column=3, sticky="e", **pad)
         self.vmin_var = tk.DoubleVar()
         self.vmax_var = tk.DoubleVar()
-        self.vmin_entry = ttk.Entry(self, textvariable=self.vmin_var, width=10, state="disabled")
-        self.vmax_entry = ttk.Entry(self, textvariable=self.vmax_var, width=10, state="disabled")
-        self.vmin_entry.grid(row=5, column=4, sticky="w", **pad)
-        self.vmax_entry.grid(row=5, column=5, sticky="w", **pad)
-        self.vmin_var.trace_add("write", lambda *_: self._on_manual_scale_changed())
-        self.vmax_var.trace_add("write", lambda *_: self._on_manual_scale_changed())
-
-        # vmin/vmax range slider
-        ttk.Label(self, text="スケール範囲:").grid(row=6, column=0, sticky="e", **pad)
         self.range_slider = _RangeSlider(self, height=24, command=self._on_range_slider_changed)
-        self.range_slider.grid(row=6, column=1, columnspan=5, sticky="ew", **pad)
-
-        # 出力オプション
         self.show_title_var = tk.BooleanVar(value=True)
         self.title_text_var = tk.StringVar(value="title (空で非表示)")
         self.show_ticks_var = tk.BooleanVar(value=True)
@@ -217,112 +143,111 @@ class XYValueMapGUI(tk.Toplevel):
         self.title_font_size_var = tk.DoubleVar(value=DEFAULT_TITLE_FONT_SIZE)
         self.tick_font_size_var = tk.DoubleVar(value=DEFAULT_TICK_FONT_SIZE)
         self.cbar_label_font_size_var = tk.DoubleVar(value=DEFAULT_CBAR_LABEL_FONT_SIZE)
-        self.colormap_mode_var = tk.StringVar(value="rgb")
+        self.colormap_mode_var = tk.StringVar(value="最小/最大の2色")
+        self.output_scale_var = tk.DoubleVar(value=1.0)
         self.export_start_var = tk.IntVar(value=1)
         self.export_end_var = tk.IntVar(value=1)
         self.export_skip_var = tk.IntVar(value=0)
+        self.export_range_slider = _RangeSlider(self, height=24, command=self._on_export_range_changed)
+        self.resolution_var = tk.DoubleVar(value=1.0)
+        self.cx_var = tk.DoubleVar()
+        self.cy_var = tk.DoubleVar()
+        self.width_var = tk.DoubleVar()
+        self.height_var = tk.DoubleVar()
+        self.angle_var = tk.DoubleVar()
+        self.status_var = tk.StringVar(value="")
 
-        opt_builder = UIBuilder(self)
-        opt_vars = {
-            "title_text_var": self.title_text_var,
-            "show_ticks_var": self.show_ticks_var,
-            "show_frame_var": self.show_frame_var,
-            "show_cbar_var": self.show_cbar_var,
-            "cbar_label_var": self.cbar_label_var,
-            "pad_inches_var": self.pad_inches_var,
-            "title_font_size_var": self.title_font_size_var,
-            "tick_font_size_var": self.tick_font_size_var,
-            "cbar_label_font_size_var": self.cbar_label_font_size_var,
-            "export_start_var": self.export_start_var,
-            "export_end_var": self.export_end_var,
-            "export_skip_var": self.export_skip_var,
-            "colormap_mode_var": self.colormap_mode_var,
-        }
-        out_widgets = opt_builder.build_output_options(self, vars=opt_vars)
-        self.title_text_entry = out_widgets["title_entry"]
-        self.pad_inches_entry = out_widgets["pad_entry"]
-        self.cbar_label_entry = out_widgets["cbar_label_entry"]
-        self.title_font_size_entry = out_widgets["title_font_entry"]
-        self.tick_font_size_entry = out_widgets["tick_font_entry"]
-        self.cbar_label_font_size_entry = out_widgets["cbar_label_font_entry"]
-        self.export_start_entry = out_widgets["export_start_entry"]
-        self.export_end_entry = out_widgets["export_end_entry"]
-        self.export_skip_entry = out_widgets["export_skip_entry"]
-        self.colormap_mode_combo = out_widgets["cmap_combo"]
+        left_builder = LeftPanelBuilder(self)
+        left_widgets = left_builder.build(left_frame, gui=self)
+        self.value_combo = left_widgets["value_combo"]
+        self.step_spin = left_widgets["step_spin"]
+        self.min_color_btn = left_widgets["min_color_btn"]
+        self.min_color_sample = left_widgets["min_color_sample"]
+        self.max_color_btn = left_widgets["max_color_btn"]
+        self.max_color_sample = left_widgets["max_color_sample"]
+        self.cmap_hint_label = left_widgets["cmap_hint"]
+        self.scale_global_radio = left_widgets["scale_global"]
+        self.scale_manual_radio = left_widgets["scale_manual"]
+        self.vmin_entry = left_widgets["vmin_entry"]
+        self.vmax_entry = left_widgets["vmax_entry"]
+        self.resolution_spin = left_widgets["resolution_spin"]
+        self.title_text_entry = left_widgets["title_entry"]
+        self.pad_inches_entry = left_widgets["pad_entry"]
+        self.cbar_label_entry = left_widgets["cbar_label_entry"]
+        self.title_font_size_entry = left_widgets["title_font_entry"]
+        self.tick_font_size_entry = left_widgets["tick_font_entry"]
+        self.cbar_label_font_size_entry = left_widgets["cbar_label_font_entry"]
+        self.export_start_entry = left_widgets["export_start_entry"]
+        self.export_end_entry = left_widgets["export_end_entry"]
+        self.export_skip_entry = left_widgets["export_skip_entry"]
+        self.export_range_slider = left_widgets["export_range_slider"]
+        self.colormap_mode_combo = left_widgets["cmap_combo"]
+        self.output_scale_entry = left_widgets["output_scale_entry"]
+        self.run_step_btn = left_widgets["run_step_btn"]
+        self.run_btn = left_widgets["run_btn"]
+
+        self.value_combo.bind("<<ComboboxSelected>>", lambda e: self._on_value_changed())
+        self.step_var.trace_add("write", lambda *_: self._on_step_changed())
+        self.min_color_var.trace_add("write", lambda *_: self._on_color_changed())
+        self.max_color_var.trace_add("write", lambda *_: self._on_color_changed())
+        self.vmin_var.trace_add("write", lambda *_: self._on_manual_scale_changed())
+        self.vmax_var.trace_add("write", lambda *_: self._on_manual_scale_changed())
+        self.resolution_var.trace_add("write", lambda *_: self._on_resolution_changed())
+
         self._out_option_checkboxes = [
-            out_widgets["show_ticks_chk"],
-            out_widgets["show_frame_chk"],
-            out_widgets["show_cbar_chk"],
+            left_widgets["show_ticks_chk"],
+            left_widgets["show_frame_chk"],
+            left_widgets["show_cbar_chk"],
         ]
         for chk in self._out_option_checkboxes:
             try:
                 chk.configure(command=self._on_output_option_changed)
             except Exception:
                 pass
-        # 変更検知
         self.title_text_var.trace_add("write", lambda *_: self._on_output_option_changed())
         self.pad_inches_var.trace_add("write", lambda *_: self._on_output_option_changed())
         self.cbar_label_var.trace_add("write", lambda *_: self._on_output_option_changed())
         self.title_font_size_var.trace_add("write", lambda *_: self._on_output_option_changed())
         self.tick_font_size_var.trace_add("write", lambda *_: self._on_output_option_changed())
         self.cbar_label_font_size_var.trace_add("write", lambda *_: self._on_output_option_changed())
-        self.colormap_mode_var.trace_add("write", lambda *_: self._on_output_option_changed())
-        # 解像度
-        ttk.Label(self, text="解像度倍率:").grid(row=8, column=0, sticky="e", **pad)
-        self.resolution_var = tk.DoubleVar(value=1.0)
-        self.resolution_spin = tk.Spinbox(
-            self,
-            from_=0.5,
-            to=8.0,
-            increment=0.5,
-            textvariable=self.resolution_var,
-            width=8,
-        )
-        self.resolution_spin.grid(row=8, column=1, sticky="w", **pad)
+        self.colormap_mode_var.trace_add("write", lambda *_: self._on_colormap_mode_changed())
+        self.output_scale_var.trace_add("write", lambda *_: self._on_output_option_changed())
+        self.export_start_var.trace_add("write", lambda *_: self._on_export_range_var_changed())
+        self.export_end_var.trace_add("write", lambda *_: self._on_export_range_var_changed())
 
-        self.resolution_var.trace_add("write", lambda *_: self._on_resolution_changed())
+        for var in (self.cx_var, self.cy_var, self.width_var, self.height_var, self.angle_var):
+            var.trace_add("write", lambda *_: self._on_roi_changed())
 
-        # ステータス
-        self.status_var = tk.StringVar(value="")
-        ttk.Label(self, textvariable=self.status_var).grid(row=9, column=0, columnspan=7, sticky="w", padx=8, pady=(2, 6))
+        self._update_colormap_dependent_controls()
 
-        # 編集/プレビュー
-        canvas_frame = ttk.Frame(self)
-        canvas_frame.grid(row=10, column=0, columnspan=7, sticky="nsew", padx=8, pady=8)
-        canvas_frame.grid_columnconfigure(0, weight=1, uniform="canvas")
-        canvas_frame.grid_columnconfigure(1, weight=1, uniform="canvas")
-        canvas_frame.grid_rowconfigure(0, weight=1)
-        edit_frame = ttk.LabelFrame(canvas_frame, text="編集（全体表示）")
-        preview_frame = ttk.LabelFrame(canvas_frame, text="プレビュー")
-        edit_frame.grid(row=0, column=0, sticky="nsew", padx=(0, 4))
-        preview_frame.grid(row=0, column=1, sticky="nsew", padx=(4, 0))
-        self._build_edit_canvas(edit_frame)
+        # 右側にプレビュー（上）・編集（下）を配置
+        right_frame = ttk.Frame(self)
+        right_frame.grid(row=0, column=7, rowspan=12, sticky="nsew", padx=8, pady=8)
+        right_frame.grid_columnconfigure(0, weight=1)
+        preview_height_px = int(max(self._figsize[1] * 100, 200))
+        self._right_frame = right_frame
+        self._preview_height_px = preview_height_px
+        right_frame.grid_rowconfigure(0, weight=0, minsize=preview_height_px)
+        right_frame.grid_rowconfigure(1, weight=0, minsize=preview_height_px)
+
+        preview_frame = ttk.LabelFrame(right_frame, text="プレビュー")
+        edit_frame = ttk.LabelFrame(right_frame, text="編集（全体表示）")
+        preview_frame.grid(row=0, column=0, sticky="nsew", padx=4, pady=(0, 4))
+        edit_frame.grid(row=1, column=0, sticky="nsew", padx=4, pady=(4, 0))
+        edit_frame.grid_rowconfigure(0, weight=0)
+        edit_frame.grid_rowconfigure(1, weight=1)
         self._build_preview(preview_frame)
-
-        # 実行
-        btn_frame = ttk.Frame(self)
-        btn_frame.grid(row=11, column=0, columnspan=7, sticky="ew", padx=8, pady=10)
-        btn_frame.columnconfigure(0, weight=1)
-        btn_frame.columnconfigure(1, weight=1)
-        self.run_step_btn = ttk.Button(btn_frame, text="このステップのみ出力", command=self._run_single_step)
-        self.run_btn = ttk.Button(btn_frame, text="実行（全ステップ出力）", command=self._run)
-        self.run_step_btn.grid(row=0, column=0, sticky="ew", padx=(0, 6))
-        self.run_btn.grid(row=0, column=1, sticky="ew", padx=(6, 0))
+        self._build_edit_panel(edit_frame)
+        self.after(0, self._sync_right_panel_heights)
 
         # layout
-        self.grid_columnconfigure(1, weight=1)
-        self.grid_columnconfigure(4, weight=1)
-        self.grid_rowconfigure(10, weight=1)
+        self.grid_columnconfigure(0, weight=1)
+        self.grid_columnconfigure(7, weight=1)
+        self.grid_rowconfigure(0, weight=1)
 
         self._interactive_widgets = [
             self.value_combo,
             self.step_spin,
-            self.cx_entry,
-            self.cy_entry,
-            self.width_entry,
-            self.height_entry,
-            self.angle_entry,
-            self.reset_roi_btn,
             self.min_color_btn,
             self.max_color_btn,
             self.scale_global_radio,
@@ -331,6 +256,12 @@ class XYValueMapGUI(tk.Toplevel):
             self.vmax_entry,
             self.range_slider,
             self.resolution_spin,
+            self.cx_entry,
+            self.cy_entry,
+            self.width_entry,
+            self.height_entry,
+            self.angle_entry,
+            self.reset_roi_btn,
             self.title_text_entry,
             self.pad_inches_entry,
             self.cbar_label_entry,
@@ -338,6 +269,8 @@ class XYValueMapGUI(tk.Toplevel):
             self.tick_font_size_entry,
             self.cbar_label_font_size_entry,
             self.colormap_mode_combo,
+            self.output_scale_entry,
+            self.export_range_slider,
             self.export_start_entry,
             self.export_end_entry,
             self.export_skip_entry,
@@ -357,6 +290,16 @@ class XYValueMapGUI(tk.Toplevel):
                 self.value_combo.configure(state="readonly")
             except Exception:
                 pass
+            try:
+                self.colormap_mode_combo.configure(state="readonly")
+            except Exception:
+                pass
+            if hasattr(self, "export_range_slider"):
+                try:
+                    self.export_range_slider.set_enabled(True)
+                except Exception:
+                    pass
+            self._update_colormap_dependent_controls()
             self._on_scale_mode_changed()
         else:
             try:
@@ -367,6 +310,11 @@ class XYValueMapGUI(tk.Toplevel):
             if hasattr(self, "range_slider"):
                 try:
                     self.range_slider.set_enabled(False)
+                except Exception:
+                    pass
+            if hasattr(self, "export_range_slider"):
+                try:
+                    self.export_range_slider.set_enabled(False)
                 except Exception:
                     pass
 
@@ -427,14 +375,62 @@ class XYValueMapGUI(tk.Toplevel):
         self.edit_canvas.bind("<Configure>", self._on_edit_configure)
         self._edit_canvas_mgr = EditCanvasManager(self)
 
+    def _build_edit_panel(self, parent):
+        parent.grid_columnconfigure(0, weight=1)
+        roi_frame = ttk.LabelFrame(parent, text="ROI")
+        roi_frame.grid(row=0, column=0, sticky="ew", padx=6, pady=6)
+        for col in (1, 3, 5, 7, 9):
+            roi_frame.columnconfigure(col, weight=1)
+
+        ttk.Label(roi_frame, text="Cx").grid(row=0, column=0, sticky="e", padx=4, pady=2)
+        self.cx_entry = ttk.Entry(roi_frame, textvariable=self.cx_var, width=8)
+        self.cx_entry.grid(row=0, column=1, sticky="ew", padx=2, pady=2)
+        ttk.Label(roi_frame, text="Cy").grid(row=0, column=2, sticky="e", padx=4, pady=2)
+        self.cy_entry = ttk.Entry(roi_frame, textvariable=self.cy_var, width=8)
+        self.cy_entry.grid(row=0, column=3, sticky="ew", padx=2, pady=2)
+        ttk.Label(roi_frame, text="W").grid(row=0, column=4, sticky="e", padx=4, pady=2)
+        self.width_entry = ttk.Entry(roi_frame, textvariable=self.width_var, width=8)
+        self.width_entry.grid(row=0, column=5, sticky="ew", padx=2, pady=2)
+        ttk.Label(roi_frame, text="H").grid(row=0, column=6, sticky="e", padx=4, pady=2)
+        self.height_entry = ttk.Entry(roi_frame, textvariable=self.height_var, width=8)
+        self.height_entry.grid(row=0, column=7, sticky="ew", padx=2, pady=2)
+        ttk.Label(roi_frame, text="Angle").grid(row=0, column=8, sticky="e", padx=4, pady=2)
+        self.angle_entry = ttk.Entry(roi_frame, textvariable=self.angle_var, width=8)
+        self.angle_entry.grid(row=0, column=9, sticky="ew", padx=2, pady=2)
+        self.reset_roi_btn = ttk.Button(roi_frame, text="全体表示", command=self._reset_roi_to_full)
+        self.reset_roi_btn.grid(row=0, column=10, sticky="w", padx=6, pady=2)
+
+        for entry in (self.cx_entry, self.cy_entry, self.width_entry, self.height_entry, self.angle_entry):
+            entry.bind("<Return>", self._on_roi_entry_confirm)
+            entry.bind("<FocusOut>", self._on_roi_entry_confirm)
+
+        self._roi_frame = roi_frame
+        canvas_frame = ttk.Frame(parent)
+        canvas_frame.grid(row=1, column=0, sticky="nsew")
+        canvas_frame.grid_rowconfigure(0, weight=1)
+        canvas_frame.grid_columnconfigure(0, weight=1)
+        self._edit_canvas_frame = canvas_frame
+        self._build_edit_canvas(canvas_frame)
+
+    def _sync_right_panel_heights(self):
+        if self._right_frame is None or self._preview_height_px is None:
+            return
+        if self._roi_frame is None or self._edit_canvas_frame is None:
+            return
+        self.update_idletasks()
+        roi_height = self._roi_frame.winfo_reqheight()
+        preview_height = self._preview_height_px
+        self._edit_canvas_frame.configure(height=preview_height)
+        self._edit_canvas_frame.grid_propagate(False)
+        self._right_frame.grid_rowconfigure(1, minsize=preview_height + roi_height)
+
     def _build_preview(self, parent):
         # Matplotlib は重いので遅延 import
         from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
         from matplotlib.figure import Figure
 
-        self.preview_fig = Figure(figsize=self._figsize, dpi=100, constrained_layout=True)
+        self.preview_fig = Figure(figsize=self._figsize, dpi=100, constrained_layout=False)
         self.preview_ax = self.preview_fig.add_subplot(111)
-
         self.preview_canvas = FigureCanvasTkAgg(self.preview_fig, master=parent)
         widget = self.preview_canvas.get_tk_widget()
         widget.pack(fill="both", expand=True)
@@ -443,11 +439,12 @@ class XYValueMapGUI(tk.Toplevel):
             widget.configure(background="#f5f5f5")
         except Exception:
             pass
-        widget.bind("<Configure>", lambda e: self._on_preview_configure())
+        widget.bind("<Configure>", lambda _e: self._on_preview_configure())
 
         self._preview_renderer = PreviewRenderer(self.preview_fig, self.preview_ax, self.preview_canvas)
         self.mesh = None
         self.cbar = None
+        self._sync_preview_figsize_to_widget()
 
     def _init_defaults(self):
         if self._data_source is None:
@@ -495,11 +492,19 @@ class XYValueMapGUI(tk.Toplevel):
         self.export_start_var.set(1)
         self.export_end_var.set(self._step_count)
         self.export_skip_var.set(0)
+        self._sync_export_step_controls()
+        self.output_scale_var.set(1.0)
 
         self._on_scale_mode_changed()
         self._on_output_option_changed()
         self.state.roi.confirmed = False
         self._schedule_view_update(immediate=True)
+
+        if self.preview_fig is not None:
+            try:
+                self.preview_fig.set_size_inches(self._figsize[0], self._figsize[1], forward=True)
+            except Exception:
+                pass
 
     def _on_close(self):
         return self.controller.on_close()
@@ -518,6 +523,49 @@ class XYValueMapGUI(tk.Toplevel):
 
     def _on_color_changed(self):
         return self.controller.on_color_changed()
+
+    def _resolve_colormap_mode(self) -> str:
+        mode_raw = self.colormap_mode_var.get().strip()
+        mode_map = {
+            "最小/最大の2色": "rgb",
+            "虹色（iRIC風）": "jet",
+            "色相回転": "hsv",
+        }
+        return mode_map.get(mode_raw, mode_raw or "rgb")
+
+    def _update_colormap_dependent_controls(self):
+        mode = self._resolve_colormap_mode()
+        use_minmax = mode != "jet"
+        state = "normal" if use_minmax else "disabled"
+        try:
+            self.min_color_btn.configure(state=state)
+            self.max_color_btn.configure(state=state)
+        except Exception:
+            pass
+        if use_minmax:
+            try:
+                self.min_color_sample.configure(background=self.min_color_var.get(), text="")
+                self.max_color_sample.configure(background=self.max_color_var.get(), text="")
+            except Exception:
+                pass
+            try:
+                self.cmap_hint_label.grid_remove()
+            except Exception:
+                pass
+        else:
+            try:
+                self.min_color_sample.configure(background="#dddddd", text="固定", foreground="#666666")
+                self.max_color_sample.configure(background="#dddddd", text="固定", foreground="#666666")
+            except Exception:
+                pass
+            try:
+                self.cmap_hint_label.grid()
+            except Exception:
+                pass
+
+    def _on_colormap_mode_changed(self):
+        self._update_colormap_dependent_controls()
+        return self.controller.on_output_option_changed()
 
     def _on_resolution_changed(self):
         return self.controller.on_resolution_changed()
@@ -584,6 +632,25 @@ class XYValueMapGUI(tk.Toplevel):
             if not np.isfinite(val) or val < 0:
                 return default
             return val
+        def _safe_scale(var: tk.DoubleVar, default: float = 1.0) -> float:
+            try:
+                val = float(var.get())
+            except Exception:
+                return default
+            if not np.isfinite(val) or val <= 0:
+                return default
+            return val
+
+        if self.preview_fig is not None:
+            try:
+                cur_w, cur_h = self.preview_fig.get_size_inches()
+                figsize = (float(cur_w), float(cur_h))
+            except Exception:
+                figsize = tuple(self._figsize)
+        else:
+            figsize = tuple(self._figsize)
+
+        colormap_mode = self._resolve_colormap_mode()
 
         return OutputOptions(
             show_title=True,
@@ -596,8 +663,9 @@ class XYValueMapGUI(tk.Toplevel):
             title_font_size=_safe_pad(self.title_font_size_var, DEFAULT_TITLE_FONT_SIZE),
             tick_font_size=_safe_pad(self.tick_font_size_var, DEFAULT_TICK_FONT_SIZE),
             cbar_label_font_size=_safe_pad(self.cbar_label_font_size_var, DEFAULT_CBAR_LABEL_FONT_SIZE),
-            figsize=tuple(self._figsize),
-            colormap_mode=self.colormap_mode_var.get().strip() or "rgb",
+            figsize=figsize,
+            colormap_mode=colormap_mode,
+            output_scale=_safe_scale(self.output_scale_var),
         )
 
     def _get_export_step_range(self) -> tuple[int, int, int]:
@@ -643,36 +711,41 @@ class XYValueMapGUI(tk.Toplevel):
                 pass
         self.state.preview.figsize = tuple(figsize)
 
-    def _fit_figsize_to_preview_frame(self, figsize: tuple[float, float]) -> tuple[float, float]:
-        """Scale figsize to fit the preview Tk widget while keeping aspect."""
+    def _sync_preview_figsize_to_widget(self) -> bool:
+        if self.preview_canvas is None or self.preview_fig is None:
+            return False
         try:
             widget = self.preview_canvas.get_tk_widget()
             avail_w = max(widget.winfo_width(), 1)
             avail_h = max(widget.winfo_height(), 1)
+            dpi = float(self.preview_fig.get_dpi()) if self.preview_fig is not None else 100.0
+            try:
+                tk_dpi = float(widget.winfo_fpixels("1i"))
+                if tk_dpi > 0:
+                    dpi = tk_dpi
+                    try:
+                        self.preview_fig.set_dpi(dpi)
+                    except Exception:
+                        pass
+            except Exception:
+                pass
         except Exception:
-            return figsize
-        dpi = float(self.preview_fig.get_dpi()) if self.preview_fig is not None else 100.0
-        fw, fh = figsize
-        if fw <= 0 or fh <= 0 or dpi <= 0:
-            return figsize
-        if avail_w < 100 or avail_h < 100:
-            return figsize
-        fig_w_px = fw * dpi
-        fig_h_px = fh * dpi
-        if fig_w_px <= 0 or fig_h_px <= 0:
-            return figsize
-        # 枠に収まるようスケール（拡大も許可）
-        scale = min(avail_w / fig_w_px, avail_h / fig_h_px)
-        scaled_w_px = fig_w_px * scale
-        scaled_h_px = fig_h_px * scale
-        if scaled_w_px <= 0 or scaled_h_px <= 0:
-            return figsize
-        # 中央寄せ用に余白を覚えておく
-        self.state.preview.pad_px = (
-            max((avail_w - scaled_w_px) / 2.0, 0.0),
-            max((avail_h - scaled_h_px) / 2.0, 0.0),
-        )
-        return (scaled_w_px / dpi, scaled_h_px / dpi)
+            return False
+        if avail_w < 50 or avail_h < 50:
+            return False
+        if self._preview_last_size == (avail_w, avail_h):
+            return False
+        if dpi <= 0:
+            return False
+        new_size = (avail_w / dpi, avail_h / dpi)
+        self._set_preview_figsize(new_size)
+        self.state.preview.pad_px = (0.0, 0.0)
+        self._preview_last_size = (avail_w, avail_h)
+        try:
+            self.preview_canvas.draw_idle()
+        except Exception:
+            pass
+        return True
 
     def _on_preview_configure(self):
         """ウィジェットサイズ変更時に画像を中央に寄せるため再配置"""
@@ -744,6 +817,60 @@ class XYValueMapGUI(tk.Toplevel):
 
     def _on_range_slider_changed(self, vmin: float, vmax: float):
         return self.controller.on_range_slider_changed(vmin, vmax)
+
+    def _on_export_range_changed(self, vmin: float, vmax: float):
+        if self._export_slider_lock or self._data_source is None:
+            return
+        max_step = max(1, int(getattr(self._data_source, "step_count", 1)))
+        start = int(round(vmin))
+        end = int(round(vmax))
+        start = max(1, min(start, max_step))
+        end = max(1, min(end, max_step))
+        if end < start:
+            start, end = end, start
+        self._export_slider_lock = True
+        try:
+            self.export_start_var.set(start)
+            self.export_end_var.set(end)
+        finally:
+            self._export_slider_lock = False
+
+    def _on_export_range_var_changed(self):
+        if self._export_var_lock:
+            return
+        self._sync_export_step_controls()
+
+    def _sync_export_step_controls(self):
+        max_step = max(1, int(getattr(self._data_source, "step_count", 1)) if self._data_source else 1)
+        try:
+            start = int(self.export_start_var.get() or 1)
+        except Exception:
+            start = 1
+        try:
+            end = int(self.export_end_var.get() or max_step)
+        except Exception:
+            end = max_step
+        start = max(1, min(start, max_step))
+        end = max(1, min(end, max_step))
+        if end < start:
+            end = start
+
+        self._export_var_lock = True
+        try:
+            self.export_start_var.set(start)
+            self.export_end_var.set(end)
+            try:
+                self.export_start_entry.configure(to=max_step)
+                self.export_end_entry.configure(to=max_step)
+            except Exception:
+                pass
+            try:
+                self.export_range_slider.set_range(1, max_step, keep_values=False)
+                self.export_range_slider.set_values(start, end)
+            except Exception:
+                pass
+        finally:
+            self._export_var_lock = False
 
     def _set_auto_range(self, vmin: float, vmax: float):
         if not np.isfinite(vmin) or not np.isfinite(vmax):
@@ -874,16 +1001,8 @@ class XYValueMapGUI(tk.Toplevel):
             finally:
                 self.state.ui.step_var_lock = False
 
-        # figsize は固定値を枠内に収まるよう縮小のみ適用
-        # ベース figsize を枠内にフィット（出力ではマージンを加味して拡張）
         output_opts = self._get_output_options()
-        pad_inches = output_opts.pad_inches
-        eff_figsize = (
-            max(self._figsize[0] + 2.0 * max(pad_inches, 0.0), 1e-6),
-            max(self._figsize[1] + 2.0 * max(pad_inches, 0.0), 1e-6),
-        )
-        fitted_figsize = self._fit_figsize_to_preview_frame(eff_figsize)
-        self._set_preview_figsize(fitted_figsize)
+        self._sync_preview_figsize_to_widget()
 
         # global スケールの計算（非同期）
         if not self.state.preview.dragging and self.state.roi.confirmed:

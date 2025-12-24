@@ -58,6 +58,7 @@ class XYValueMapController:
         gui = self.gui
         gui.min_color_sample.configure(background=gui.min_color_var.get())
         gui.max_color_sample.configure(background=gui.max_color_var.get())
+        gui._update_colormap_dependent_controls()
         gui.state.edit.map_dirty = True
         gui._schedule_view_update()
 
@@ -124,23 +125,9 @@ class XYValueMapController:
 
     def on_preview_configure(self):
         gui = self.gui
-        try:
-            widget = gui.preview_canvas.get_tk_widget()
-            avail_w = max(widget.winfo_width(), 1)
-            avail_h = max(widget.winfo_height(), 1)
-        except Exception:
+        if not gui._sync_preview_figsize_to_widget():
             return
-        try:
-            _, height = gui.preview_fig.get_size_inches()
-            dpi = gui.preview_fig.get_dpi()
-            _ = height * dpi
-        except Exception:
-            pass
-        pad_x, pad_y = gui.state.preview.pad_px
-        try:
-            widget.pack_configure(padx=int(pad_x), pady=int(pad_y))
-        except Exception:
-            pass
+        gui._schedule_view_update(immediate=True)
 
     def on_range_slider_changed(self, vmin: float, vmax: float):
         gui = self.gui

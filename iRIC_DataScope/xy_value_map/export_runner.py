@@ -66,6 +66,12 @@ def run_export_all(
         step_skip = 0
     stride = int(step_skip) + 1
     total = len(range(start, end + 1, stride))
+    output_scale = float(getattr(output_opts, "output_scale", 1.0) or 1.0)
+    if not (output_scale > 0):
+        output_scale = 1.0
+    base_dpi = 100
+    export_dpi = max(1, int(round(base_dpi * output_scale)))
+
     progress = progress_factory(max(1, total), "出力中")
     try:
         export_func(
@@ -91,6 +97,7 @@ def run_export_all(
             pad_inches=output_opts.pad_inches,
             figsize=output_opts.figsize,
             colormap_mode=output_opts.colormap_mode,
+            dpi=export_dpi,
             step_start=start,
             step_end=end,
             step_skip=step_skip,
@@ -158,6 +165,12 @@ def run_export_single_step(
                 raise ValueError("ROI 内の Value が全て NaN/Inf か点がありません。")
             vmin, vmax = minmax
 
+    output_scale = float(getattr(output_opts, "output_scale", 1.0) or 1.0)
+    if not (output_scale > 0):
+        output_scale = 1.0
+    base_dpi = 100
+    export_dpi = max(1, int(round(base_dpi * output_scale)))
+
     progress = progress_factory(1, "出力中")
     try:
         if hasattr(progress, "update"):
@@ -186,6 +199,7 @@ def run_export_single_step(
             pad_inches=output_opts.pad_inches,
             figsize=output_opts.figsize,
             colormap_mode=output_opts.colormap_mode,
+            dpi=export_dpi,
         )
     except Exception as e:
         raise RuntimeError(f"画像出力に失敗しました:\n{e}") from e

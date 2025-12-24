@@ -109,3 +109,27 @@ beta2でログ強化。
   補足:
   - `--collect-all pandas` は確実性重視の指定（pandas は内部で動的 import / バイナリ拡張が多く、環境によっては不足して落ちるため）
   - `matplotlib` が不足する場合は `--collect-submodules matplotlib` も追加（ただしサイズが増えます）
+
+最新のバージョンをビルドする際には SciPy も明示的に収集した方が逆変換や zoom 処理で不足が起きにくいので、以下のテンプレートを使ってください（フォント警告対策で `style.ensure_japanese_font()` は起動前に呼び出しておく構成を想定）。
+```
+pyinstaller `
+  --onefile `
+  --windowed `
+  --noconfirm `
+  --clean `
+  --name iRIC_DataScope-v1.1.0 `
+  --add-data "iRIC_DataScope;iRIC_DataScope" `
+  --hidden-import=logging.handlers `
+  --hidden-import=tkinter.ttk `
+  --hidden-import=tkinter.filedialog `
+  --hidden-import=tkinter.messagebox `
+  --hidden-import=matplotlib.backends.backend_tkagg `
+  --collect-submodules pandas `
+  --collect-submodules numpy `
+  --collect-submodules scipy `
+  --collect-submodules h5py `
+  --collect-submodules openpyxl `
+  --collect-submodules xlsxwriter `
+  --collect-data matplotlib `
+  iRIC_DataScope\\app.py
+```

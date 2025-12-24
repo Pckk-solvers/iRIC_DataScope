@@ -26,6 +26,10 @@ class PreviewRenderer:
         except Exception:
             face = None
         try:
+            self.fig.set_constrained_layout(False)
+        except Exception:
+            pass
+        try:
             self.fig.clf()
         except Exception:
             pass
@@ -90,18 +94,27 @@ class PreviewRenderer:
                 cbar_label = output_opts.cbar_label
                 if cbar_label:
                     try:
+                        label_fs = output_opts.cbar_label_font_size
+                        if label_fs is None:
+                            label_fs = output_opts.tick_font_size
+                        if label_fs is None:
+                            label_fs = 10.0
+                        labelpad = max(10.0, float(label_fs) * 1.2)
                         self.cbar.ax.set_ylabel(
                             cbar_label,
                             fontsize=output_opts.cbar_label_font_size,
                             rotation=270,
-                            labelpad=10,
+                            labelpad=labelpad,
                         )
+                        self.cbar.ax.yaxis.set_label_position("right")
+                        self.cbar.ax.yaxis.set_ticks_position("right")
                     except Exception:
                         pass
                 tick_fs = output_opts.tick_font_size
                 if tick_fs is not None:
                     try:
-                        self.cbar.ax.tick_params(labelsize=tick_fs)
+                        tick_pad = max(2.0, float(tick_fs) * 0.2)
+                        self.cbar.ax.tick_params(labelsize=tick_fs, pad=tick_pad)
                     except Exception:
                         pass
             except Exception:
@@ -199,6 +212,13 @@ class PreviewRenderer:
             dpi = self.fig.get_dpi()
             pad_px = max(pad_inches, 0.0) * dpi
             tight_px = tight.transformed(self.fig.dpi_scale_trans)
+            try:
+                if self.cbar is not None and self.cbar.ax is not None:
+                    cbar_bbox = self.cbar.ax.get_tightbbox(renderer)
+                    if cbar_bbox is not None:
+                        tight_px = Bbox.union([tight_px, cbar_bbox])
+            except Exception:
+                pass
             bbox = Bbox.from_extents(
                 tight_px.x0 - pad_px, tight_px.y0 - pad_px, tight_px.x1 + pad_px, tight_px.y1 + pad_px
             )
@@ -237,5 +257,9 @@ class PreviewRenderer:
     def _draw_and_overlay(self, *, pad_inches: float):
         if self.canvas is None:
             return
+        try:
+            self.fig.tight_layout()
+        except Exception:
+            pass
         self.canvas.draw_idle()
         self.update_tight_bbox_overlay(pad_inches=pad_inches)
