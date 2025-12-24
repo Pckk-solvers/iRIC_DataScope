@@ -23,6 +23,7 @@ class OutputOptions:
     tick_font_size: float | None = DEFAULT_TICK_FONT_SIZE
     cbar_label_font_size: float | None = DEFAULT_CBAR_LABEL_FONT_SIZE
     figsize: Tuple[float, float] = (6.0, 4.0)
+    colormap_mode: str = "rgb"
 
     def to_kwargs(self) -> dict[str, object]:
         return {
@@ -37,4 +38,5 @@ class OutputOptions:
             "tick_font_size": self.tick_font_size,
             "cbar_label_font_size": self.cbar_label_font_size,
             "figsize": tuple(self.figsize),
+            "colormap_mode": self.colormap_mode,
         }

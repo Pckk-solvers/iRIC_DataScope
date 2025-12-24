@@ -90,6 +90,7 @@ def run_export_all(
             cbar_label_font_size=output_opts.cbar_label_font_size,
             pad_inches=output_opts.pad_inches,
             figsize=output_opts.figsize,
+            colormap_mode=output_opts.colormap_mode,
             step_start=start,
             step_end=end,
             step_skip=step_skip,
@@ -184,6 +185,7 @@ def run_export_single_step(
             cbar_label_font_size=output_opts.cbar_label_font_size,
             pad_inches=output_opts.pad_inches,
             figsize=output_opts.figsize,
+            colormap_mode=output_opts.colormap_mode,
         )
     except Exception as e:
         raise RuntimeError(f"画像出力に失敗しました:\n{e}") from e

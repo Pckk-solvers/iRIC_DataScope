@@ -30,13 +30,13 @@ from .style import (
     DEFAULT_CBAR_LABEL_FONT_SIZE,
     DEFAULT_TICK_FONT_SIZE,
     DEFAULT_TITLE_FONT_SIZE,
+    build_colormap,
     get_edit_colormap,
 )
 from .processor import (
     DataSource,
     Roi,
     RoiGrid,
-    build_colormap,
     clamp_roi_to_bounds,
     parse_color,
 )
@@ -217,6 +217,7 @@ class XYValueMapGUI(tk.Toplevel):
         self.title_font_size_var = tk.DoubleVar(value=DEFAULT_TITLE_FONT_SIZE)
         self.tick_font_size_var = tk.DoubleVar(value=DEFAULT_TICK_FONT_SIZE)
         self.cbar_label_font_size_var = tk.DoubleVar(value=DEFAULT_CBAR_LABEL_FONT_SIZE)
+        self.colormap_mode_var = tk.StringVar(value="rgb")
         self.export_start_var = tk.IntVar(value=1)
         self.export_end_var = tk.IntVar(value=1)
         self.export_skip_var = tk.IntVar(value=0)
@@ -235,6 +236,7 @@ class XYValueMapGUI(tk.Toplevel):
             "export_start_var": self.export_start_var,
             "export_end_var": self.export_end_var,
             "export_skip_var": self.export_skip_var,
+            "colormap_mode_var": self.colormap_mode_var,
         }
         out_widgets = opt_builder.build_output_options(self, vars=opt_vars)
         self.title_text_entry = out_widgets["title_entry"]
@@ -246,6 +248,7 @@ class XYValueMapGUI(tk.Toplevel):
         self.export_start_entry = out_widgets["export_start_entry"]
         self.export_end_entry = out_widgets["export_end_entry"]
         self.export_skip_entry = out_widgets["export_skip_entry"]
+        self.colormap_mode_combo = out_widgets["cmap_combo"]
         self._out_option_checkboxes = [
             out_widgets["show_ticks_chk"],
             out_widgets["show_frame_chk"],
@@ -263,6 +266,7 @@ class XYValueMapGUI(tk.Toplevel):
         self.title_font_size_var.trace_add("write", lambda *_: self._on_output_option_changed())
         self.tick_font_size_var.trace_add("write", lambda *_: self._on_output_option_changed())
         self.cbar_label_font_size_var.trace_add("write", lambda *_: self._on_output_option_changed())
+        self.colormap_mode_var.trace_add("write", lambda *_: self._on_output_option_changed())
         # 解像度
         ttk.Label(self, text="解像度倍率:").grid(row=8, column=0, sticky="e", **pad)
         self.resolution_var = tk.DoubleVar(value=1.0)
@@ -333,6 +337,7 @@ class XYValueMapGUI(tk.Toplevel):
             self.title_font_size_entry,
             self.tick_font_size_entry,
             self.cbar_label_font_size_entry,
+            self.colormap_mode_combo,
             self.export_start_entry,
             self.export_end_entry,
             self.export_skip_entry,
@@ -592,6 +597,7 @@ class XYValueMapGUI(tk.Toplevel):
             tick_font_size=_safe_pad(self.tick_font_size_var, DEFAULT_TICK_FONT_SIZE),
             cbar_label_font_size=_safe_pad(self.cbar_label_font_size_var, DEFAULT_CBAR_LABEL_FONT_SIZE),
             figsize=tuple(self._figsize),
+            colormap_mode=self.colormap_mode_var.get().strip() or "rgb",
         )
 
     def _get_export_step_range(self) -> tuple[int, int, int]:
@@ -890,7 +896,11 @@ class XYValueMapGUI(tk.Toplevel):
             messagebox.showerror("エラー", f"プレビューデータの取得に失敗しました:\n{e}")
             return
 
-        cmap = build_colormap(self.min_color_var.get(), self.max_color_var.get())
+        cmap = build_colormap(
+            self.min_color_var.get(),
+            self.max_color_var.get(),
+            mode=output_opts.colormap_mode,
+        )
         if self.state.edit.map_dirty or self._edit_image_id is None:
             try:
                 # Keep edit background scale tied to full-domain values (ROI independent).

@@ -27,11 +27,22 @@ class UIBuilder:
         opt_frame.columnconfigure(1, weight=1)
         opt_frame.columnconfigure(2, weight=1)
         opt_frame.columnconfigure(3, weight=1)
+        opt_frame.columnconfigure(4, weight=1)
 
         ttk.Label(opt_frame, text="タイトル文字列").grid(row=0, column=0, sticky="e", padx=6, pady=2)
-        title_entry = ttk.Entry(opt_frame, textvariable=vars["title_text_var"], width=40)
-        title_entry.grid(row=0, column=1, columnspan=3, sticky="ew", padx=2, pady=2)
+        title_entry = ttk.Entry(opt_frame, textvariable=vars["title_text_var"], width=30)
+        title_entry.grid(row=0, column=1, columnspan=2, sticky="ew", padx=2, pady=2)
         widgets["title_entry"] = title_entry
+
+        ttk.Label(opt_frame, text="カラーマップ").grid(row=0, column=3, sticky="e", padx=6, pady=2)
+        widgets["cmap_combo"] = ttk.Combobox(
+            opt_frame,
+            textvariable=vars["colormap_mode_var"],
+            state="readonly",
+            width=10,
+            values=["rgb", "jet", "hsv"],
+        )
+        widgets["cmap_combo"].grid(row=0, column=4, sticky="w", padx=2, pady=2)
 
         widgets["show_ticks_chk"] = ttk.Checkbutton(opt_frame, text="目盛り", variable=vars["show_ticks_var"])
         widgets["show_ticks_chk"].grid(row=1, column=0, sticky="w", padx=6, pady=2)

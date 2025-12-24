@@ -101,17 +101,6 @@ def parse_color(color: str) -> str:
     return c
 
 
-def build_colormap(min_color: str, max_color: str):
-    from matplotlib.colors import LinearSegmentedColormap
-
-    cmap = LinearSegmentedColormap.from_list("xy_value_map", [min_color, max_color])
-    try:
-        cmap.set_bad(color=(0, 0, 0, 0))
-    except Exception:
-        pass
-    return cmap
-
-
 def frame_to_grids(frame, *, value_col: str) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     df = frame.df
     required = {"I", "J", "X", "Y", value_col}

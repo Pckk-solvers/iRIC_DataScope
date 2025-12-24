@@ -55,4 +55,5 @@ def test_output_options_defaults(tk_root, monkeypatch, tmp_path):
     assert opts.tick_font_size == pytest.approx(DEFAULT_TICK_FONT_SIZE)
     assert opts.cbar_label_font_size == pytest.approx(DEFAULT_CBAR_LABEL_FONT_SIZE)
     assert opts.figsize == (6.0, 4.0)
+    assert opts.colormap_mode == "rgb"
     win.destroy()

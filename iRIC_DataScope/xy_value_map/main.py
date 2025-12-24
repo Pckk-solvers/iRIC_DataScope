@@ -10,11 +10,11 @@ from .plot import _build_title, render_xy_value_map
 from .processor import (
     DataSource,
     Roi,
-    build_colormap,
     compute_global_value_range_rotated,
     frame_to_grids,
     prepare_rotated_grid,
 )
+from .style import build_colormap
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +96,7 @@ def export_xy_value_map_step(
     margin_y_pct: float = 0.0,
     pad_inches: float = 0.02,
     figsize: tuple[float, float] | None = None,
+    colormap_mode: str = "rgb",
 ) -> Path:
     """
     指定した 1 ステップ分の X-Y 分布画像を出力する。
@@ -123,7 +124,7 @@ def export_xy_value_map_step(
     if finite.size == 0:
         raise ValueError("ROI 内の Value が全て NaN/Inf です。")
 
-    cmap = build_colormap(min_color, max_color)
+    cmap = build_colormap(min_color, max_color, mode=colormap_mode)
 
     # ベース figsize（指定なければ固定）に pad_inches を足し込んだ実寸で描画
     if figsize is None:
@@ -201,6 +202,7 @@ def export_xy_value_maps(
     margin_y_pct: float = 0.0,
     pad_inches: float = 0.02,
     figsize: tuple[float, float] | None = None,
+    colormap_mode: str = "rgb",
     step_start: int | None = None,
     step_end: int | None = None,
     step_skip: int = 0,
@@ -213,7 +215,7 @@ def export_xy_value_maps(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    cmap = build_colormap(min_color, max_color)
+    cmap = build_colormap(min_color, max_color, mode=colormap_mode)
 
     if scale_mode == "manual":
         if manual_scale is None:

@@ -89,3 +89,44 @@ def get_edit_colormap():
 
     # 編集キャンバス用の単色寄りカラーマップ。
     return colormaps.get_cmap(EDIT_COLORMAP_NAME)
+
+
+def build_colormap(min_color: str, max_color: str, *, mode: str = "rgb"):
+    from matplotlib import colormaps
+    from matplotlib.colors import LinearSegmentedColormap, to_rgb
+
+    mode_key = (mode or "rgb").strip().lower()
+    if mode_key == "jet":
+        cmap = colormaps.get_cmap("jet")
+    elif mode_key == "hsv":
+        try:
+            import colorsys
+
+            r1, g1, b1 = to_rgb(min_color)
+            r2, g2, b2 = to_rgb(max_color)
+            h1, s1, v1 = colorsys.rgb_to_hsv(r1, g1, b1)
+            h2, s2, v2 = colorsys.rgb_to_hsv(r2, g2, b2)
+            dh = h2 - h1
+            if dh > 0.5:
+                dh -= 1.0
+            elif dh < -0.5:
+                dh += 1.0
+            steps = 256
+            colors = []
+            for i in range(steps):
+                t = i / (steps - 1)
+                h = (h1 + dh * t) % 1.0
+                s = s1 + (s2 - s1) * t
+                v = v1 + (v2 - v1) * t
+                colors.append(colorsys.hsv_to_rgb(h, s, v))
+            cmap = LinearSegmentedColormap.from_list("xy_value_map_hsv", colors)
+        except Exception:
+            cmap = LinearSegmentedColormap.from_list("xy_value_map", [min_color, max_color])
+    else:
+        cmap = LinearSegmentedColormap.from_list("xy_value_map", [min_color, max_color])
+
+    try:
+        cmap.set_bad(color=(0, 0, 0, 0))
+    except Exception:
+        pass
+    return cmap
