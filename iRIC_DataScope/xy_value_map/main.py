@@ -201,6 +201,9 @@ def export_xy_value_maps(
     margin_y_pct: float = 0.0,
     pad_inches: float = 0.02,
     figsize: tuple[float, float] | None = None,
+    step_start: int | None = None,
+    step_end: int | None = None,
+    step_skip: int = 0,
 ) -> Path:
     """
     全ステップ分の X-Y 分布画像を出力する。
@@ -225,8 +228,25 @@ def export_xy_value_maps(
             dy=dy,
         )
 
-    total = data_source.step_count
-    digits = max(4, len(str(total)))
+    total_steps = max(1, int(getattr(data_source, "step_count", 1)))
+    digits = max(4, len(str(total_steps)))
+
+    try:
+        start = int(step_start or 1)
+    except Exception:
+        start = 1
+    try:
+        end = int(step_end or total_steps)
+    except Exception:
+        end = total_steps
+    start = max(1, min(start, total_steps))
+    end = max(1, min(end, total_steps))
+    if end < start:
+        end = start
+    if step_skip < 0:
+        step_skip = 0
+    stride = int(step_skip) + 1
+    target_total = len(range(start, end + 1, stride))
 
     # ベース figsize（指定なければ固定）に pad_inches を足し込んだ実寸で描画
     if figsize is None:
@@ -242,9 +262,17 @@ def export_xy_value_maps(
 
     current = 0
     for frame in data_source.iter_frames(value_col=value_col):
+        if frame.step < start or frame.step > end:
+            continue
+        if (frame.step - start) % stride != 0:
+            continue
         current += 1
         if progress is not None:
-            progress.update(current=current, total=total, text=f"出力中: {current}/{total} (step={frame.step})")
+            progress.update(
+                current=current,
+                total=target_total,
+                text=f"出力中: {current}/{target_total} (step={frame.step})",
+            )
 
         try:
             x, y, v = frame_to_grids(frame, value_col=value_col)
@@ -304,6 +332,6 @@ def export_xy_value_maps(
         fig.savefig(out_path, bbox_inches="tight", pad_inches=pad_inches)
 
     if progress is not None:
-        progress.update(current=total, total=total, text="完了")
+        progress.update(current=target_total, total=target_total, text="完了")
 
     return output_dir

@@ -16,7 +16,8 @@ class UIBuilder:
         vars: {
           title_text_var, show_ticks_var, show_frame_var, show_cbar_var,
           cbar_label_var, pad_inches_var,
-          title_font_size_var, tick_font_size_var, cbar_label_font_size_var
+          title_font_size_var, tick_font_size_var, cbar_label_font_size_var,
+          export_start_var, export_end_var, export_skip_var
         }
         """
         widgets: dict[str, object] = {}
@@ -58,5 +59,16 @@ class UIBuilder:
         ttk.Label(opt_frame, text="CBラベルFont").grid(row=5, column=0, sticky="e", padx=6, pady=2)
         widgets["cbar_label_font_entry"] = ttk.Entry(opt_frame, textvariable=vars["cbar_label_font_size_var"], width=8)
         widgets["cbar_label_font_entry"].grid(row=5, column=1, sticky="w", padx=2, pady=2)
+
+        ttk.Label(opt_frame, text="出力ステップ").grid(row=6, column=0, sticky="e", padx=6, pady=2)
+        widgets["export_start_entry"] = ttk.Entry(opt_frame, textvariable=vars["export_start_var"], width=8)
+        widgets["export_start_entry"].grid(row=6, column=1, sticky="w", padx=2, pady=2)
+        ttk.Label(opt_frame, text="〜").grid(row=6, column=2, sticky="w", padx=2, pady=2)
+        widgets["export_end_entry"] = ttk.Entry(opt_frame, textvariable=vars["export_end_var"], width=8)
+        widgets["export_end_entry"].grid(row=6, column=3, sticky="w", padx=2, pady=2)
+
+        ttk.Label(opt_frame, text="間引き数").grid(row=7, column=0, sticky="e", padx=6, pady=2)
+        widgets["export_skip_entry"] = ttk.Entry(opt_frame, textvariable=vars["export_skip_var"], width=8)
+        widgets["export_skip_entry"].grid(row=7, column=1, sticky="w", padx=2, pady=2)
 
         return widgets

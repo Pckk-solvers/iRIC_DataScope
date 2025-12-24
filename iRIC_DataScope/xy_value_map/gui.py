@@ -217,6 +217,9 @@ class XYValueMapGUI(tk.Toplevel):
         self.title_font_size_var = tk.DoubleVar(value=DEFAULT_TITLE_FONT_SIZE)
         self.tick_font_size_var = tk.DoubleVar(value=DEFAULT_TICK_FONT_SIZE)
         self.cbar_label_font_size_var = tk.DoubleVar(value=DEFAULT_CBAR_LABEL_FONT_SIZE)
+        self.export_start_var = tk.IntVar(value=1)
+        self.export_end_var = tk.IntVar(value=1)
+        self.export_skip_var = tk.IntVar(value=0)
 
         opt_builder = UIBuilder(self)
         opt_vars = {
@@ -229,6 +232,9 @@ class XYValueMapGUI(tk.Toplevel):
             "title_font_size_var": self.title_font_size_var,
             "tick_font_size_var": self.tick_font_size_var,
             "cbar_label_font_size_var": self.cbar_label_font_size_var,
+            "export_start_var": self.export_start_var,
+            "export_end_var": self.export_end_var,
+            "export_skip_var": self.export_skip_var,
         }
         out_widgets = opt_builder.build_output_options(self, vars=opt_vars)
         self.title_text_entry = out_widgets["title_entry"]
@@ -237,6 +243,9 @@ class XYValueMapGUI(tk.Toplevel):
         self.title_font_size_entry = out_widgets["title_font_entry"]
         self.tick_font_size_entry = out_widgets["tick_font_entry"]
         self.cbar_label_font_size_entry = out_widgets["cbar_label_font_entry"]
+        self.export_start_entry = out_widgets["export_start_entry"]
+        self.export_end_entry = out_widgets["export_end_entry"]
+        self.export_skip_entry = out_widgets["export_skip_entry"]
         self._out_option_checkboxes = [
             out_widgets["show_ticks_chk"],
             out_widgets["show_frame_chk"],
@@ -324,6 +333,9 @@ class XYValueMapGUI(tk.Toplevel):
             self.title_font_size_entry,
             self.tick_font_size_entry,
             self.cbar_label_font_size_entry,
+            self.export_start_entry,
+            self.export_end_entry,
+            self.export_skip_entry,
             self.run_step_btn,
             self.run_btn,
         ]
@@ -475,6 +487,9 @@ class XYValueMapGUI(tk.Toplevel):
                 self._base_dx, self._base_dy = 1.0, 1.0
             self._base_spacing_ready = True
         self.resolution_var.set(1.0)
+        self.export_start_var.set(1)
+        self.export_end_var.set(self._step_count)
+        self.export_skip_var.set(0)
 
         self._on_scale_mode_changed()
         self._on_output_option_changed()
@@ -578,6 +593,31 @@ class XYValueMapGUI(tk.Toplevel):
             cbar_label_font_size=_safe_pad(self.cbar_label_font_size_var, DEFAULT_CBAR_LABEL_FONT_SIZE),
             figsize=tuple(self._figsize),
         )
+
+    def _get_export_step_range(self) -> tuple[int, int, int]:
+        if self._data_source is None:
+            return 1, 1, 0
+        max_step = max(1, int(getattr(self._data_source, "step_count", 1)))
+        try:
+            start = int(self.export_start_var.get() or 1)
+        except Exception:
+            start = 1
+        try:
+            end = int(self.export_end_var.get() or max_step)
+        except Exception:
+            end = max_step
+        try:
+            skip = int(self.export_skip_var.get() or 0)
+        except Exception:
+            skip = 0
+
+        start = max(1, min(start, max_step))
+        end = max(1, min(end, max_step))
+        if end < start:
+            end = start
+        if skip < 0:
+            skip = 0
+        return start, end, skip
 
     def _set_preview_figsize(self, figsize: tuple[float, float]):
         """Update preview figure size if changed and keep the latest size."""
@@ -1332,6 +1372,7 @@ class XYValueMapGUI(tk.Toplevel):
             messagebox.showerror("エラー", f"色の指定が不正です:\n{e}")
             return
         output_opts = self._get_output_options()
+        export_start, export_end, export_skip = self._get_export_step_range()
 
         out_base = Path(self.output_var.get())
         out_dir = out_base / f"xy_value_map_{value_col}"
@@ -1349,6 +1390,9 @@ class XYValueMapGUI(tk.Toplevel):
                 output_dir=out_dir,
                 scale_mode=scale_mode,
                 manual_scale=manual_scale,
+                step_start=export_start,
+                step_end=export_end,
+                step_skip=export_skip,
                 progress_factory=lambda maximum, title: _ProgressWindow(self, title=title, maximum=maximum),
                 export_func=export_xy_value_maps,
             )

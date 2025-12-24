@@ -41,13 +41,32 @@ def run_export_all(
     output_dir: Path,
     scale_mode: str,
     manual_scale: tuple[object, object] | None,
+    step_start: int | None = None,
+    step_end: int | None = None,
+    step_skip: int = 0,
     progress_factory: Callable[[int, str], object],
     export_func,
 ) -> Path:
     _validate_value_col(value_col)
     normalized_scale = _normalize_manual_scale(scale_mode, manual_scale)
-
-    progress = progress_factory(getattr(data_source, "step_count", 1), "出力中")
+    step_count = max(1, int(getattr(data_source, "step_count", 1)))
+    try:
+        start = int(step_start or 1)
+    except Exception:
+        start = 1
+    try:
+        end = int(step_end or step_count)
+    except Exception:
+        end = step_count
+    start = max(1, min(start, step_count))
+    end = max(1, min(end, step_count))
+    if end < start:
+        end = start
+    if step_skip < 0:
+        step_skip = 0
+    stride = int(step_skip) + 1
+    total = len(range(start, end + 1, stride))
+    progress = progress_factory(max(1, total), "出力中")
     try:
         export_func(
             data_source=data_source,
@@ -71,6 +90,9 @@ def run_export_all(
             cbar_label_font_size=output_opts.cbar_label_font_size,
             pad_inches=output_opts.pad_inches,
             figsize=output_opts.figsize,
+            step_start=start,
+            step_end=end,
+            step_skip=step_skip,
             progress=progress,
         )
     except Exception as e:
