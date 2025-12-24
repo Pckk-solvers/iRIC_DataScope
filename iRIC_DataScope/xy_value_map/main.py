@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Literal
 
 import numpy as np
+from matplotlib import font_manager, rcParams
 
 from .processor import (
     DataSource,
@@ -16,6 +17,28 @@ from .processor import (
 )
 
 logger = logging.getLogger(__name__)
+_JP_FONT_SET = False
+
+
+def _ensure_japanese_font():
+    """Try to set a font that can render Japanese to avoid glyph warnings."""
+    global _JP_FONT_SET
+    if _JP_FONT_SET:
+        return
+    candidates = ["Yu Gothic", "Yu Gothic UI", "Meiryo", "MS Gothic", "Noto Sans CJK JP"]
+    for name in candidates:
+        try:
+            path = font_manager.findfont(name, fallback_to_default=False)
+            if path:
+                rcParams["font.family"] = name
+                rcParams["axes.unicode_minus"] = False
+                _JP_FONT_SET = True
+                return
+        except Exception:
+            continue
+    # fallback: at least avoid minus glyph issues
+    rcParams["axes.unicode_minus"] = False
+    _JP_FONT_SET = True
 
 
 def _build_title(
@@ -24,20 +47,13 @@ def _build_title(
     t: float,
     value_col: str,
     show_title: bool,
-    show_step: bool,
-    show_time: bool,
-    show_value: bool,
+    title_text: str = "",
 ) -> str:
     if not show_title:
         return ""
-    parts: list[str] = []
-    if show_step:
-        parts.append(f"step={step}")
-    if show_time:
-        parts.append(f"t={t:g}")
-    if show_value:
-        parts.append(f"value={value_col}")
-    return "  ".join(parts)
+    if title_text:
+        return title_text
+    return ""
 
 
 def figure_size_from_roi(
@@ -63,25 +79,24 @@ def figure_size_from_roi(
     return (w, h)
 
 
-def _apply_plot_options(ax, *, show_ticks: bool, show_frame: bool, margin_pct: float = 0.0):
+def _apply_plot_options(
+    ax,
+    *,
+    show_ticks: bool,
+    show_frame: bool,
+    margin_x_pct: float = 0.0,
+    margin_y_pct: float = 0.0,
+    tick_labelsize: float | None = None,
+):
     ax.tick_params(
         bottom=show_ticks,
         left=show_ticks,
         labelbottom=show_ticks,
         labelleft=show_ticks,
+        labelsize=tick_labelsize,
     )
     for spine in ax.spines.values():
         spine.set_visible(show_frame)
-    if margin_pct > 0.0:
-        m = min(max(margin_pct, 0.0), 50.0) / 100.0
-        left = m
-        right = 1.0 - m
-        bottom = m
-        top = 1.0 - m
-        try:
-            ax.figure.subplots_adjust(left=left, right=right, bottom=bottom, top=top)
-        except Exception:
-            pass
 
 
 def compute_figure_size(
@@ -126,11 +141,17 @@ def render_xy_value_map(
     show_ticks: bool,
     show_frame: bool,
     show_cbar: bool,
-    margin_pct: float = 0.0,
+    margin_x_pct: float = 0.0,
+    margin_y_pct: float = 0.0,
+    cbar_label: str = "",
+    title_font_size: float | None = None,
+    tick_font_size: float | None = None,
+    cbar_label_font_size: float | None = None,
 ):
     """
     プレビュー／出力共通の描画処理
     """
+    _ensure_japanese_font()
     # クリップ
     from matplotlib.patches import Rectangle
 
@@ -143,10 +164,18 @@ def render_xy_value_map(
     m.set_clip_path(clip_rect)
 
     # オプション適用
-    _apply_plot_options(ax, show_ticks=show_ticks, show_frame=show_frame, margin_pct=margin_pct)
+    _apply_plot_options(
+        ax,
+        show_ticks=show_ticks,
+        show_frame=show_frame,
+        margin_x_pct=margin_x_pct,
+        margin_y_pct=margin_y_pct,
+        tick_labelsize=tick_font_size,
+    )
 
     # タイトル
-    ax.set_title(title)
+    if title:
+        ax.set_title(title, fontsize=title_font_size)
 
     # 軸範囲
     ax.set_xlim(0.0, width)
@@ -160,9 +189,20 @@ def render_xy_value_map(
 
             divider = make_axes_locatable(ax)
             cax = divider.append_axes("right", size="5%", pad=0.05)
-            fig.colorbar(m, cax=cax)
+            cb = fig.colorbar(m, cax=cax)
         except Exception:
-            fig.colorbar(m, ax=ax, fraction=0.04, pad=0.01)
+            cb = fig.colorbar(m, ax=ax, fraction=0.04, pad=0.01)
+
+        if cbar_label:
+            try:
+                cb.ax.set_ylabel(cbar_label, fontsize=cbar_label_font_size, rotation=270, labelpad=10)
+            except Exception:
+                pass
+        if tick_font_size is not None:
+            try:
+                cb.ax.tick_params(labelsize=tick_font_size)
+            except Exception:
+                pass
 
     return m
 
@@ -181,13 +221,17 @@ def export_xy_value_map_step(
     dy: float = 1.0,
     dpi: int = 100,
     show_title: bool = True,
-    show_step: bool = True,
-    show_time: bool = True,
-    show_value: bool = True,
+    title_text: str = "",
     show_ticks: bool = True,
     show_frame: bool = True,
     show_cbar: bool = True,
-    margin_pct: float = 0.0,
+    cbar_label: str = "",
+    title_font_size: float | None = None,
+    tick_font_size: float | None = None,
+    cbar_label_font_size: float | None = None,
+    margin_x_pct: float = 0.0,
+    margin_y_pct: float = 0.0,
+    pad_inches: float = 0.02,
     figsize: tuple[float, float] | None = None,
 ) -> Path:
     """
@@ -218,22 +262,26 @@ def export_xy_value_map_step(
 
     cmap = build_colormap(min_color, max_color)
 
-    # プレビューと同じ figsize を使用（指定なければ ROI 比率から算出）
+    # ベース figsize（指定なければ固定）に pad_inches を足し込んだ実寸で描画
     if figsize is None:
-        figsize = (6.0, 4.0)
+        base_figsize = (6.0, 4.0)
+    else:
+        base_figsize = figsize
+    eff_figsize = (
+        max(base_figsize[0] + 2.0 * max(pad_inches, 0.0), 1e-6),
+        max(base_figsize[1] + 2.0 * max(pad_inches, 0.0), 1e-6),
+    )
 
     from matplotlib.figure import Figure
 
-    fig = Figure(figsize=figsize, dpi=dpi, constrained_layout=True)
+    fig = Figure(figsize=eff_figsize, dpi=dpi, constrained_layout=True)
     ax = fig.add_subplot(111)
     title = _build_title(
         step=frame.step,
         t=frame.time,
         value_col=value_col,
         show_title=show_title,
-        show_step=show_step,
-        show_time=show_time,
-        show_value=show_value,
+        title_text=title_text,
     )
     render_xy_value_map(
         fig=fig,
@@ -249,12 +297,17 @@ def export_xy_value_map_step(
         show_ticks=show_ticks,
         show_frame=show_frame,
         show_cbar=show_cbar,
-        margin_pct=margin_pct,
+        margin_x_pct=margin_x_pct,
+        margin_y_pct=margin_y_pct,
+        cbar_label=cbar_label,
+        title_font_size=title_font_size,
+        tick_font_size=tick_font_size,
+        cbar_label_font_size=cbar_label_font_size,
     )
 
     digits = max(4, len(str(data_source.step_count)))
     out_path = output_dir / f"step_{frame.step:0{digits}d}.png"
-    fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
+    fig.savefig(out_path, bbox_inches="tight", pad_inches=pad_inches)
     return out_path
 
 
@@ -273,13 +326,17 @@ def export_xy_value_maps(
     progress=None,
     dpi: int = 100,
     show_title: bool = True,
-    show_step: bool = True,
-    show_time: bool = True,
-    show_value: bool = True,
+    title_text: str = "",
     show_ticks: bool = True,
     show_frame: bool = True,
     show_cbar: bool = True,
-    margin_pct: float = 0.0,
+    cbar_label: str = "",
+    title_font_size: float | None = None,
+    tick_font_size: float | None = None,
+    cbar_label_font_size: float | None = None,
+    margin_x_pct: float = 0.0,
+    margin_y_pct: float = 0.0,
+    pad_inches: float = 0.02,
     figsize: tuple[float, float] | None = None,
 ) -> Path:
     """
@@ -308,11 +365,15 @@ def export_xy_value_maps(
     total = data_source.step_count
     digits = max(4, len(str(total)))
 
-    # プレビューと同じ figsize を使用（全ステップ同一）。指定なければ固定サイズ。
-    width = max(float(roi.width), 1e-12)
-    height = max(float(roi.height), 1e-12)
+    # ベース figsize（指定なければ固定）に pad_inches を足し込んだ実寸で描画
     if figsize is None:
-        figsize = (6.0, 4.0)
+        base_figsize = (6.0, 4.0)
+    else:
+        base_figsize = figsize
+    eff_figsize = (
+        max(base_figsize[0] + 2.0 * max(pad_inches, 0.0), 1e-6),
+        max(base_figsize[1] + 2.0 * max(pad_inches, 0.0), 1e-6),
+    )
 
     from matplotlib.figure import Figure
 
@@ -345,16 +406,14 @@ def export_xy_value_maps(
             logger.info("Skip step=%s: ROI内のValueが全てNaN/Infです", frame.step)
             continue
 
-        fig = Figure(figsize=figsize, dpi=dpi, constrained_layout=True)
+        fig = Figure(figsize=eff_figsize, dpi=dpi, constrained_layout=True)
         ax = fig.add_subplot(111)
         title = _build_title(
             step=frame.step,
             t=frame.time,
             value_col=value_col,
             show_title=show_title,
-            show_step=show_step,
-            show_time=show_time,
-            show_value=show_value,
+            title_text=title_text,
         )
         render_xy_value_map(
             fig=fig,
@@ -370,11 +429,16 @@ def export_xy_value_maps(
             show_ticks=show_ticks,
             show_frame=show_frame,
             show_cbar=show_cbar,
-            margin_pct=margin_pct,
+            margin_x_pct=margin_x_pct,
+            margin_y_pct=margin_y_pct,
+            title_font_size=title_font_size,
+            tick_font_size=tick_font_size,
+            cbar_label_font_size=cbar_label_font_size,
+            cbar_label=cbar_label,
         )
 
         out_path = output_dir / f"step_{frame.step:0{digits}d}.png"
-        fig.savefig(out_path, bbox_inches="tight", pad_inches=0.02)
+        fig.savefig(out_path, bbox_inches="tight", pad_inches=pad_inches)
 
     if progress is not None:
         progress.update(current=total, total=total, text="完了")

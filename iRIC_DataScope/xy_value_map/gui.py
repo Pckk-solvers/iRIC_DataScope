@@ -107,6 +107,7 @@ class XYValueMapGUI(tk.Toplevel):
         self._output_opts_lock = False
         self._roi_confirmed = False
         self._figsize: tuple[float, float] = (6.0, 4.0)
+        self._tight_rect = None
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_menu()
@@ -232,21 +233,50 @@ class XYValueMapGUI(tk.Toplevel):
         opt_frame.columnconfigure(3, weight=1)
 
         self.show_title_var = tk.BooleanVar(value=True)
-        self.show_step_var = tk.BooleanVar(value=True)
-        self.show_time_var = tk.BooleanVar(value=True)
-        self.show_value_var = tk.BooleanVar(value=True)
+        self.title_text_var = tk.StringVar(value="title (空で非表示)")
         self.show_ticks_var = tk.BooleanVar(value=True)
         self.show_frame_var = tk.BooleanVar(value=True)
         self.show_cbar_var = tk.BooleanVar(value=True)
+        self.cbar_label_var = tk.StringVar(value="colorbar (空で非表示)")
+        self.pad_inches_var = tk.DoubleVar(value=0.02)
+        self.title_font_size_var = tk.DoubleVar(value=12.0)
+        self.tick_font_size_var = tk.DoubleVar(value=10.0)
+        self.cbar_label_font_size_var = tk.DoubleVar(value=10.0)
 
-        ttk.Checkbutton(opt_frame, text="タイトル", variable=self.show_title_var, command=self._on_output_option_changed).grid(row=0, column=0, sticky="w", padx=6, pady=2)
-        ttk.Checkbutton(opt_frame, text="step", variable=self.show_step_var, command=self._on_output_option_changed).grid(row=0, column=1, sticky="w", padx=6, pady=2)
-        ttk.Checkbutton(opt_frame, text="t", variable=self.show_time_var, command=self._on_output_option_changed).grid(row=0, column=2, sticky="w", padx=6, pady=2)
-        ttk.Checkbutton(opt_frame, text="value", variable=self.show_value_var, command=self._on_output_option_changed).grid(row=0, column=3, sticky="w", padx=6, pady=2)
+        ttk.Label(opt_frame, text="タイトル文字列").grid(row=0, column=0, sticky="e", padx=6, pady=2)
+        self.title_text_entry = ttk.Entry(opt_frame, textvariable=self.title_text_var, width=40)
+        self.title_text_entry.grid(row=0, column=1, columnspan=3, sticky="ew", padx=2, pady=2)
+        self.title_text_var.trace_add("write", lambda *_: self._on_output_option_changed())
 
         ttk.Checkbutton(opt_frame, text="目盛り", variable=self.show_ticks_var, command=self._on_output_option_changed).grid(row=1, column=0, sticky="w", padx=6, pady=2)
         ttk.Checkbutton(opt_frame, text="枠線", variable=self.show_frame_var, command=self._on_output_option_changed).grid(row=1, column=1, sticky="w", padx=6, pady=2)
         ttk.Checkbutton(opt_frame, text="カラーバー", variable=self.show_cbar_var, command=self._on_output_option_changed).grid(row=1, column=2, sticky="w", padx=6, pady=2)
+
+        ttk.Label(opt_frame, text="pad[in]").grid(row=2, column=0, sticky="e", padx=6, pady=2)
+        self.pad_inches_entry = ttk.Entry(opt_frame, textvariable=self.pad_inches_var, width=8)
+        self.pad_inches_entry.grid(row=2, column=1, sticky="w", padx=2, pady=2)
+        self.pad_inches_var.trace_add("write", lambda *_: self._on_output_option_changed())
+
+        ttk.Label(opt_frame, text="カラーバー名").grid(row=3, column=0, sticky="e", padx=6, pady=2)
+        self.cbar_label_entry = ttk.Entry(opt_frame, textvariable=self.cbar_label_var, width=30)
+        self.cbar_label_entry.grid(row=3, column=1, columnspan=3, sticky="ew", padx=2, pady=2)
+        self.cbar_label_var.trace_add("write", lambda *_: self._on_output_option_changed())
+
+        ttk.Label(opt_frame, text="タイトルFont").grid(row=4, column=0, sticky="e", padx=6, pady=2)
+        self.title_font_size_entry = ttk.Entry(opt_frame, textvariable=self.title_font_size_var, width=8)
+        self.title_font_size_entry.grid(row=4, column=1, sticky="w", padx=2, pady=2)
+        self.title_font_size_var.trace_add("write", lambda *_: self._on_output_option_changed())
+
+        ttk.Label(opt_frame, text="目盛Font").grid(row=4, column=2, sticky="e", padx=6, pady=2)
+        self.tick_font_size_entry = ttk.Entry(opt_frame, textvariable=self.tick_font_size_var, width=8)
+        self.tick_font_size_entry.grid(row=4, column=3, sticky="w", padx=2, pady=2)
+        self.tick_font_size_var.trace_add("write", lambda *_: self._on_output_option_changed())
+
+        ttk.Label(opt_frame, text="CBラベルFont").grid(row=5, column=0, sticky="e", padx=6, pady=2)
+        self.cbar_label_font_size_entry = ttk.Entry(opt_frame, textvariable=self.cbar_label_font_size_var, width=8)
+        self.cbar_label_font_size_entry.grid(row=5, column=1, sticky="w", padx=2, pady=2)
+        self.cbar_label_font_size_var.trace_add("write", lambda *_: self._on_output_option_changed())
+
 
 
         # 解像度
@@ -313,6 +343,12 @@ class XYValueMapGUI(tk.Toplevel):
             self.vmax_entry,
             self.range_slider,
             self.resolution_spin,
+            self.title_text_entry,
+            self.pad_inches_entry,
+            self.cbar_label_entry,
+            self.title_font_size_entry,
+            self.tick_font_size_entry,
+            self.cbar_label_font_size_entry,
             self.run_step_btn,
             self.run_btn,
         ]
@@ -608,15 +644,26 @@ class XYValueMapGUI(tk.Toplevel):
         return None
 
     def _get_output_options(self) -> dict[str, object]:
+        def _safe_pad(var: tk.DoubleVar, default: float = 0.02) -> float:
+            try:
+                val = float(var.get())
+            except Exception:
+                return default
+            if not np.isfinite(val) or val < 0:
+                return default
+            return val
+
         return {
-            "show_title": bool(self.show_title_var.get()),
-            "show_step": bool(self.show_step_var.get()),
-            "show_time": bool(self.show_time_var.get()),
-            "show_value": bool(self.show_value_var.get()),
+            "show_title": True,
+            "title_text": self.title_text_var.get().strip(),
             "show_ticks": bool(self.show_ticks_var.get()),
             "show_frame": bool(self.show_frame_var.get()),
             "show_cbar": bool(self.show_cbar_var.get()),
-            "margin_pct": 0.0,
+            "cbar_label": self.cbar_label_var.get().strip(),
+            "pad_inches": _safe_pad(self.pad_inches_var),
+            "title_font_size": _safe_pad(self.title_font_size_var, 12.0),
+            "tick_font_size": _safe_pad(self.tick_font_size_var, 10.0),
+            "cbar_label_font_size": _safe_pad(self.cbar_label_font_size_var, 10.0),
             "figsize": tuple(self._figsize),
         }
 
@@ -636,7 +683,7 @@ class XYValueMapGUI(tk.Toplevel):
                 self.preview_fig.set_size_inches(*figsize, forward=True)
             except Exception:
                 pass
-        self._figsize = tuple(figsize)
+        self._preview_figsize = tuple(figsize)
 
     def _fit_figsize_to_preview_frame(self, figsize: tuple[float, float]) -> tuple[float, float]:
         """Scale figsize to fit the preview Tk widget while keeping aspect."""
@@ -656,8 +703,8 @@ class XYValueMapGUI(tk.Toplevel):
         fig_h_px = fh * dpi
         if fig_w_px <= 0 or fig_h_px <= 0:
             return figsize
-        # 縮小のみ（拡大はしない）
-        scale = min(avail_w / fig_w_px, avail_h / fig_h_px, 1.0)
+        # 枠に収まるようスケール（拡大も許可）
+        scale = min(avail_w / fig_w_px, avail_h / fig_h_px)
         scaled_w_px = fig_w_px * scale
         scaled_h_px = fig_h_px * scale
         if scaled_w_px <= 0 or scaled_h_px <= 0:
@@ -895,10 +942,15 @@ class XYValueMapGUI(tk.Toplevel):
                 self._step_var_lock = False
 
         # figsize は固定値を枠内に収まるよう縮小のみ適用
-        fitted_figsize = self._fit_figsize_to_preview_frame(self._figsize)
-        self._set_preview_figsize(fitted_figsize)
-
+        # ベース figsize を枠内にフィット（出力ではマージンを加味して拡張）
         output_opts = self._get_output_options()
+        pad_inches = output_opts.get("pad_inches", 0.02)
+        eff_figsize = (
+            max(self._figsize[0] + 2.0 * max(pad_inches, 0.0), 1e-6),
+            max(self._figsize[1] + 2.0 * max(pad_inches, 0.0), 1e-6),
+        )
+        fitted_figsize = self._fit_figsize_to_preview_frame(eff_figsize)
+        self._set_preview_figsize(fitted_figsize)
 
         # global スケールの計算（非同期）
         if not self._preview_dragging and self._roi_confirmed:
@@ -1835,7 +1887,9 @@ class XYValueMapGUI(tk.Toplevel):
         self.preview_ax.set_xlim(0.0, width)
         self.preview_ax.set_ylim(0.0, height)
         self.preview_ax.set_aspect("equal", adjustable="box")
+        pad_inches = opts.get("pad_inches", 0.02)
         self.preview_canvas.draw_idle()
+        self._update_tight_bbox_overlay(pad_inches=pad_inches)
 
     def _draw_pending_preview(self, roi: Roi, output_opts: dict[str, object] | None = None):
         self._draw_empty_preview(roi, output_opts, title="ROI not confirmed")
@@ -1871,9 +1925,14 @@ class XYValueMapGUI(tk.Toplevel):
             show_ticks=output_opts.get("show_ticks", True),
             show_frame=output_opts.get("show_frame", True),
             show_cbar=output_opts.get("show_cbar", True),
-            margin_pct=output_opts.get("margin_pct", 0.0),
+            cbar_label=output_opts.get("cbar_label", ""),
+            title_font_size=output_opts.get("title_font_size", None),
+            tick_font_size=output_opts.get("tick_font_size", None),
+            cbar_label_font_size=output_opts.get("cbar_label_font_size", None),
         )
+        pad_inches = output_opts.get("pad_inches", 0.02)
         self.preview_canvas.draw_idle()
+        self._update_tight_bbox_overlay(pad_inches=pad_inches)
 
     def _reset_preview_axes(self):
         """Clear preview axes and colorbar to avoid leftover artists/clipping."""
@@ -1896,25 +1955,89 @@ class XYValueMapGUI(tk.Toplevel):
                 pass
         self.cbar = None
         self.mesh = None
+        self._tight_rect = None
+
+    def _update_tight_bbox_overlay(self, pad_inches: float = 0.02):
+        """Preview 用: bbox_inches=\"tight\" 相当の領域を破線で可視化する。"""
+        try:
+            fig = self.preview_fig
+            canvas = self.preview_canvas
+            if fig is None or canvas is None:
+                return
+            # 既存の枠を除去
+            if self._tight_rect is not None:
+                try:
+                    self._tight_rect.remove()
+                except Exception:
+                    pass
+                self._tight_rect = None
+
+            canvas.draw()
+            renderer = canvas.get_renderer()
+            if renderer is None:
+                return
+
+            from matplotlib.transforms import Bbox
+
+            tight = fig.get_tightbbox(renderer)
+            fig_box = fig.get_window_extent(renderer)
+            if tight is None or fig_box is None:
+                return
+            dpi = fig.get_dpi()
+            pad_px = max(pad_inches, 0.0) * dpi
+            # tight はインチベースなのでピクセルに変換
+            tight_px = tight.transformed(fig.dpi_scale_trans)
+            bbox = Bbox.from_extents(
+                tight_px.x0 - pad_px, tight_px.y0 - pad_px, tight_px.x1 + pad_px, tight_px.y1 + pad_px
+            )
+
+            # Figure ウィンドウ座標系で正規化（0-1）
+            w_fig = fig_box.width
+            h_fig = fig_box.height
+            if w_fig <= 0 or h_fig <= 0:
+                return
+            x0 = (bbox.x0 - fig_box.x0) / w_fig
+            y0 = (bbox.y0 - fig_box.y0) / h_fig
+            width = bbox.width / w_fig
+            height = bbox.height / h_fig
+            if width <= 0 or height <= 0:
+                return
+
+            from matplotlib.patches import Rectangle
+
+            rect = Rectangle(
+                (x0, y0),
+                width,
+                height,
+                transform=fig.transFigure,
+                fill=False,
+                edgecolor="#808080",
+                linestyle="--",
+                linewidth=1.0,
+                zorder=20,
+            )
+            rect.set_clip_on(False)
+            fig.add_artist(rect)
+            self._tight_rect = rect
+            canvas.draw_idle()
+        except Exception:
+            pass
 
     def _build_plot_title(self, *, step: int, t: float, value_col: str, output_opts: dict[str, object]) -> str:
         if not output_opts.get("show_title", True):
             return ""
         parts: list[str] = []
-        if output_opts.get("show_step", True):
-            parts.append(f"step={step}")
-        if output_opts.get("show_time", True):
-            parts.append(f"t={t:g}")
-        if output_opts.get("show_value", True):
-            parts.append(f"value={value_col}")
-        return "  ".join(parts)
+        title_text = output_opts.get("title_text", "")
+        if output_opts.get("show_title", True):
+            if title_text:
+                return title_text
+            return ""
+        return ""
 
     def _apply_plot_options(self, *, ax, mesh, output_opts: dict[str, object]):
         show_ticks = bool(output_opts.get("show_ticks", True))
         show_frame = bool(output_opts.get("show_frame", True))
         show_cbar = bool(output_opts.get("show_cbar", True))
-        margin_pct = float(output_opts.get("margin_pct", 0.0))
-        margin_pct = min(max(margin_pct, 0.0), 50.0)
 
         ax.tick_params(
             bottom=show_ticks,
@@ -1949,6 +2072,23 @@ class XYValueMapGUI(tk.Toplevel):
                     ]
                 )
                 self.cbar = self.preview_fig.colorbar(mesh, cax=cax)
+                cbar_label = output_opts.get("cbar_label", "")
+                if cbar_label:
+                    try:
+                        self.cbar.ax.set_ylabel(
+                            cbar_label,
+                            fontsize=output_opts.get("cbar_label_font_size", None),
+                            rotation=270,
+                            labelpad=10,
+                        )
+                    except Exception:
+                        pass
+                tick_fs = output_opts.get("tick_font_size", None)
+                if tick_fs is not None:
+                    try:
+                        self.cbar.ax.tick_params(labelsize=tick_fs)
+                    except Exception:
+                        pass
             except Exception:
                 self.cbar = None
         else:
@@ -1959,18 +2099,6 @@ class XYValueMapGUI(tk.Toplevel):
                     pass
                 self.cbar = None
 
-        # マージン%適用のみ（中央寄せはデフォルト配置に任せ、テキストの見切れを避ける）
-        if margin_pct > 0.0:
-            m = margin_pct / 100.0
-            m = min(max(m, 0.0), 0.5)
-            left = m
-            right = 1.0 - m
-            bottom = m
-            top = 1.0 - m
-            try:
-                ax.figure.subplots_adjust(left=left, right=right, bottom=bottom, top=top)
-            except Exception:
-                pass
 
     def _get_preview_frame(self, step: int, value_col: str):
         key = (step, value_col)
@@ -2107,13 +2235,15 @@ class XYValueMapGUI(tk.Toplevel):
                 dx=dx,
                 dy=dy,
                 show_title=output_opts["show_title"],
-                show_step=output_opts["show_step"],
-                show_time=output_opts["show_time"],
-                show_value=output_opts["show_value"],
+                title_text=output_opts["title_text"],
                 show_ticks=output_opts["show_ticks"],
                 show_frame=output_opts["show_frame"],
                 show_cbar=output_opts["show_cbar"],
-                margin_pct=output_opts["margin_pct"],
+                cbar_label=output_opts["cbar_label"],
+                title_font_size=output_opts["title_font_size"],
+                tick_font_size=output_opts["tick_font_size"],
+                cbar_label_font_size=output_opts["cbar_label_font_size"],
+                pad_inches=output_opts["pad_inches"],
                 figsize=output_opts["figsize"],
                 progress=progress,
             )
@@ -2226,13 +2356,11 @@ class XYValueMapGUI(tk.Toplevel):
                 dx=dx,
                 dy=dy,
                 show_title=output_opts["show_title"],
-                show_step=output_opts["show_step"],
-                show_time=output_opts["show_time"],
-                show_value=output_opts["show_value"],
+                title_text=output_opts["title_text"],
                 show_ticks=output_opts["show_ticks"],
                 show_frame=output_opts["show_frame"],
                 show_cbar=output_opts["show_cbar"],
-                margin_pct=output_opts["margin_pct"],
+                pad_inches=output_opts["pad_inches"],
                 figsize=output_opts["figsize"],
             )
         except Exception as e:
