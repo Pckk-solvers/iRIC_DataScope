@@ -3,6 +3,12 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Tuple
 
+from .style import (
+    DEFAULT_CBAR_LABEL_FONT_SIZE,
+    DEFAULT_TICK_FONT_SIZE,
+    DEFAULT_TITLE_FONT_SIZE,
+)
+
 
 @dataclass
 class OutputOptions:
@@ -13,9 +19,9 @@ class OutputOptions:
     show_cbar: bool = True
     cbar_label: str = ""
     pad_inches: float = 0.02
-    title_font_size: float | None = 12.0
-    tick_font_size: float | None = 10.0
-    cbar_label_font_size: float | None = 10.0
+    title_font_size: float | None = DEFAULT_TITLE_FONT_SIZE
+    tick_font_size: float | None = DEFAULT_TICK_FONT_SIZE
+    cbar_label_font_size: float | None = DEFAULT_CBAR_LABEL_FONT_SIZE
     figsize: Tuple[float, float] = (6.0, 4.0)
 
     def to_kwargs(self) -> dict[str, object]:

@@ -1,5 +1,8 @@
 """GUI起動のスモークテストと出力オプション既定値の確認を行う。"""
 
+# GUI を起動し初期ロードをスキップした状態でウィンドウ生成と破棄が走ること、`_get_output_options` が
+# デフォルトでタイトル・軸・フレーム・カラーバーの表示を有効にし、パディングやフォントサイズなどを既定値で返すことを検証します。
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -42,8 +45,14 @@ def test_output_options_defaults(tk_root, monkeypatch, tmp_path):
     assert opts.pad_inches == pytest.approx(0.02)
     assert opts.title_text.startswith("title")
     assert opts.cbar_label.startswith("colorbar")
-    assert opts.title_font_size == pytest.approx(12.0)
-    assert opts.tick_font_size == pytest.approx(10.0)
-    assert opts.cbar_label_font_size == pytest.approx(10.0)
+    from iRIC_DataScope.xy_value_map.style import (
+        DEFAULT_CBAR_LABEL_FONT_SIZE,
+        DEFAULT_TICK_FONT_SIZE,
+        DEFAULT_TITLE_FONT_SIZE,
+    )
+
+    assert opts.title_font_size == pytest.approx(DEFAULT_TITLE_FONT_SIZE)
+    assert opts.tick_font_size == pytest.approx(DEFAULT_TICK_FONT_SIZE)
+    assert opts.cbar_label_font_size == pytest.approx(DEFAULT_CBAR_LABEL_FONT_SIZE)
     assert opts.figsize == (6.0, 4.0)
     win.destroy()

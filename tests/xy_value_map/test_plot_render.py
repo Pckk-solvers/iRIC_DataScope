@@ -1,5 +1,8 @@
 """最小データで描画が例外なく完了することを確認する。"""
 
+# `render_xy_value_map` を最小の XY グリッドと ROI で描画し、matplotlib の `Figure`/`Axes` の
+# 構成を渡した場合に `mappable` が返ってくることを確認することで、描画処理が正常に完了するかを検証します。
+
 from __future__ import annotations
 
 import numpy as np

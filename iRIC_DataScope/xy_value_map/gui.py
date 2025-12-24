@@ -1,38 +1,44 @@
 from __future__ import annotations
 
-import base64
-import io
 import logging
 import math
 import threading
 import tkinter as tk
 import webbrowser
-from dataclasses import dataclass
 from pathlib import Path
 from tkinter import colorchooser, messagebox, ttk
 
 import numpy as np
 
+from .controller import XYValueMapController
+from .data_prep import (
+    compute_roi_minmax,
+    estimate_base_spacing_from_frame,
+    prepare_preview_grid,
+    slice_frame_to_roi_grid,
+)
+from .edit_canvas import EditCanvasManager
+from .export_runner import run_export_all, run_export_single_step
+from .cache import PreviewFrameCache
 from .main import export_xy_value_map_step, export_xy_value_maps, figure_size_from_roi
 from .options import OutputOptions
-from .plot import render_xy_value_map
+from .preview_renderer import PreviewRenderer
+from .state import GuiState
+from .tasks import GlobalScaleWorker
 from .ui import UIBuilder
+from .style import (
+    DEFAULT_CBAR_LABEL_FONT_SIZE,
+    DEFAULT_TICK_FONT_SIZE,
+    DEFAULT_TITLE_FONT_SIZE,
+    get_edit_colormap,
+)
 from .processor import (
     DataSource,
     Roi,
     RoiGrid,
     build_colormap,
     clamp_roi_to_bounds,
-    compute_global_value_range_rotated,
-    downsample_grid_for_preview,
-    estimate_grid_spacing,
-    frame_to_grids,
     parse_color,
-    prepare_rotated_grid,
-    prepare_rotated_grid_from_grid,
-    roi_bounds,
-    roi_corners,
-    slice_grids_to_bounds,
 )
 
 logger = logging.getLogger(__name__)
@@ -40,14 +46,6 @@ logger = logging.getLogger(__name__)
 
 
 MANUAL_URL = "https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=73"
-
-
-@dataclass
-class _GlobalScaleState:
-    token: int = 0
-    vmin: float | None = None
-    vmax: float | None = None
-    running: bool = False
 
 
 class XYValueMapGUI(tk.Toplevel):
@@ -65,21 +63,17 @@ class XYValueMapGUI(tk.Toplevel):
         self._step_count = 1
         self._value_columns: list[str] | None = None
 
-        self._global_scale = _GlobalScaleState()
-        self._preview_frame_cache: dict[tuple[int, str], object] = {}
+        self._global_scale = GlobalScaleWorker(lambda func: self.after(0, func))
+        self._preview_frame_cache = PreviewFrameCache()
         self._base_dx = 1.0
         self._base_dy = 1.0
         self._base_spacing_ready = False
-        self._edit_base_bounds: tuple[float, float, float, float] | None = None
-        self._edit_view_bounds: tuple[float, float, float, float] | None = None
-        self._edit_map_dirty = True
+        self.state = GuiState()
         self._edit_fig = None
         self._edit_ax = None
         self._edit_agg = None
         self._edit_image_id = None
         self._edit_image_tk = None
-        self._edit_render_job = None
-        self._edit_render_context: dict[str, object] | None = None
         self._edit_domain_rect_id = None
         self._edit_pad_rect_id = None
         self._edit_overlay_text_id = None
@@ -87,25 +81,15 @@ class XYValueMapGUI(tk.Toplevel):
         self._edit_hint_text_id = None
         self._edit_hint_bg_id = None
         self._edit_outline_id = None
-        self._edit_outline_points: np.ndarray | None = None
-        self._edit_context: dict[str, object] = {"step": None, "time": None, "value": ""}
-        self._last_output_opts: dict[str, object] | None = None
+        self._edit_canvas_mgr: EditCanvasManager | None = None
+        self._preview_renderer: PreviewRenderer | None = None
         self._roi_patch = None
         self._roi_bottom_edge = None
         self._roi_rotate_line = None
         self._roi_handles: list[dict[str, object]] = []
-        self._roi_var_lock = False
-        self._drag_state: dict[str, object] | None = None
-        self._preview_dragging = False
-        self._step_var_lock = False
-        self._scale_var_lock = False
-        self._slider_lock = False
-        self._auto_range: tuple[float, float] | None = None
-        self._scale_ratio: tuple[float, float] = (0.0, 1.0)
-        self._output_opts_lock = False
-        self._roi_confirmed = False
         self._figsize: tuple[float, float] = (6.0, 4.0)
         self._tight_rect = None
+        self.controller = XYValueMapController(self)
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_menu()
@@ -230,9 +214,9 @@ class XYValueMapGUI(tk.Toplevel):
         self.show_cbar_var = tk.BooleanVar(value=True)
         self.cbar_label_var = tk.StringVar(value="colorbar (空で非表示)")
         self.pad_inches_var = tk.DoubleVar(value=0.02)
-        self.title_font_size_var = tk.DoubleVar(value=12.0)
-        self.tick_font_size_var = tk.DoubleVar(value=10.0)
-        self.cbar_label_font_size_var = tk.DoubleVar(value=10.0)
+        self.title_font_size_var = tk.DoubleVar(value=DEFAULT_TITLE_FONT_SIZE)
+        self.tick_font_size_var = tk.DoubleVar(value=DEFAULT_TICK_FONT_SIZE)
+        self.cbar_label_font_size_var = tk.DoubleVar(value=DEFAULT_CBAR_LABEL_FONT_SIZE)
 
         opt_builder = UIBuilder(self)
         opt_vars = {
@@ -382,8 +366,7 @@ class XYValueMapGUI(tk.Toplevel):
                 base_dx, base_dy = 1.0, 1.0
                 try:
                     frame0 = ds.get_frame(step=1, value_col=vars_[0])
-                    x0, y0, _ = frame_to_grids(frame0, value_col=vars_[0])
-                    base_dx, base_dy = estimate_grid_spacing(x0, y0)
+                    base_dx, base_dy = estimate_base_spacing_from_frame(frame0, value_col=vars_[0])
                 except Exception:
                     base_dx, base_dy = 1.0, 1.0
             except Exception as e:
@@ -425,6 +408,7 @@ class XYValueMapGUI(tk.Toplevel):
         self.edit_canvas.bind("<Control-Button-4>", self._on_edit_scroll)
         self.edit_canvas.bind("<Control-Button-5>", self._on_edit_scroll)
         self.edit_canvas.bind("<Configure>", self._on_edit_configure)
+        self._edit_canvas_mgr = EditCanvasManager(self)
 
     def _build_preview(self, parent):
         # Matplotlib は重いので遅延 import
@@ -444,6 +428,7 @@ class XYValueMapGUI(tk.Toplevel):
             pass
         widget.bind("<Configure>", lambda e: self._on_preview_configure())
 
+        self._preview_renderer = PreviewRenderer(self.preview_fig, self.preview_ax, self.preview_canvas)
         self.mesh = None
         self.cbar = None
 
@@ -476,14 +461,16 @@ class XYValueMapGUI(tk.Toplevel):
 
         pad_x = max(width * 0.10, 1e-12)
         pad_y = max(height * 0.10, 1e-12)
-        self._edit_base_bounds = (xmin - pad_x, xmax + pad_x, ymin - pad_y, ymax + pad_y)
-        self._edit_view_bounds = self._edit_base_bounds
+        self.state.edit.base_bounds = (xmin - pad_x, xmax + pad_x, ymin - pad_y, ymax + pad_y)
+        self.state.edit.view_bounds = self.state.edit.base_bounds
 
         if not self._base_spacing_ready:
             try:
                 frame0 = self._data_source.get_frame(step=1, value_col=self.value_var.get())
-                x0, y0, _ = frame_to_grids(frame0, value_col=self.value_var.get())
-                self._base_dx, self._base_dy = estimate_grid_spacing(x0, y0)
+                self._base_dx, self._base_dy = estimate_base_spacing_from_frame(
+                    frame0,
+                    value_col=self.value_var.get(),
+                )
             except Exception:
                 self._base_dx, self._base_dy = 1.0, 1.0
             self._base_spacing_ready = True
@@ -491,40 +478,17 @@ class XYValueMapGUI(tk.Toplevel):
 
         self._on_scale_mode_changed()
         self._on_output_option_changed()
-        self._roi_confirmed = False
+        self.state.roi.confirmed = False
         self._schedule_view_update(immediate=True)
 
     def _on_close(self):
-        try:
-            if self._data_source is not None:
-                self._data_source.close()
-        finally:
-            self.destroy()
+        return self.controller.on_close()
 
     def _on_value_changed(self):
-        self._preview_frame_cache.clear()
-        self._invalidate_global_scale()
-        self._edit_map_dirty = True
-        self._schedule_view_update(immediate=True)
+        return self.controller.on_value_changed()
 
     def _on_step_changed(self):
-        if self._step_var_lock:
-            return
-        if self._data_source is None:
-            return
-        try:
-            step = int(self.step_var.get())
-        except Exception:
-            return
-        step = max(1, min(step, self._data_source.step_count))
-        if step != self.step_var.get():
-            self._step_var_lock = True
-            try:
-                self.step_var.set(step)
-            finally:
-                self._step_var_lock = False
-        self._edit_map_dirty = True
-        self._schedule_view_update(immediate=True)
+        return self.controller.on_step_changed()
 
     def _choose_color(self, var: tk.StringVar):
         current = var.get()
@@ -533,43 +497,19 @@ class XYValueMapGUI(tk.Toplevel):
             var.set(hex_color)
 
     def _on_color_changed(self):
-        self.min_color_sample.configure(background=self.min_color_var.get())
-        self.max_color_sample.configure(background=self.max_color_var.get())
-        self._edit_map_dirty = True
-        self._schedule_view_update()
+        return self.controller.on_color_changed()
 
     def _on_resolution_changed(self):
-        self._invalidate_global_scale()
-        self._schedule_view_update()
+        return self.controller.on_resolution_changed()
 
     def _on_scale_mode_changed(self):
-        manual = self.scale_mode.get() == "manual"
-        self.vmin_entry.configure(state="normal" if manual else "disabled")
-        self.vmax_entry.configure(state="normal" if manual else "disabled")
-        if hasattr(self, "range_slider"):
-            self.range_slider.set_enabled(manual and self._auto_range is not None)
-        if manual:
-            self._ensure_manual_scale_defaults()
-            self._sync_slider_from_vars()
-        self._edit_map_dirty = True
-        self._schedule_view_update(immediate=True)
+        return self.controller.on_scale_mode_changed()
 
     def _on_manual_scale_changed(self):
-        if self.scale_mode.get() != "manual":
-            return
-        if self._scale_var_lock:
-            return
-        self._clamp_manual_scale()
-        self._update_scale_ratio_from_vars()
-        self._sync_slider_from_vars()
-        self._edit_map_dirty = True
-        self._schedule_view_update()
+        return self.controller.on_manual_scale_changed()
 
     def _on_output_option_changed(self):
-        if self._output_opts_lock:
-            return
-        self._edit_map_dirty = True
-        self._schedule_view_update(immediate=True)
+        return self.controller.on_output_option_changed()
 
     def _reset_roi_to_full(self):
         if self._data_source is None:
@@ -589,22 +529,11 @@ class XYValueMapGUI(tk.Toplevel):
         self._reset_edit_view()
 
     def _invalidate_global_scale(self):
-        self._global_scale.token += 1
-        self._global_scale.vmin = None
-        self._global_scale.vmax = None
+        self._global_scale.invalidate()
         self._clear_auto_range()
 
     def _on_roi_changed(self):
-        if self._roi_var_lock:
-            return
-        self._roi_confirmed = False
-        self._invalidate_global_scale()
-        try:
-            roi = self._get_roi()
-        except Exception:
-            return
-        self._update_edit_roi_artists(roi)
-        self._schedule_view_update()
+        return self.controller.on_roi_changed()
 
     def _get_roi(self) -> Roi:
         try:
@@ -619,20 +548,12 @@ class XYValueMapGUI(tk.Toplevel):
         return self._clamp_roi_for_edit(roi)
 
     def _on_roi_entry_confirm(self, _event=None):
-        if self._data_source is None:
-            return
-        try:
-            roi = self._get_roi()
-        except Exception:
-            return
-        self._apply_roi_update(roi, schedule_views=True, invalidate_scale=True, confirm=True)
+        return self.controller.on_roi_entry_confirm(_event)
 
     def _get_scale(self) -> tuple[float, float] | None:
         if self.scale_mode.get() == "manual":
             return float(self.vmin_var.get()), float(self.vmax_var.get())
-        if self._global_scale.vmin is not None and self._global_scale.vmax is not None:
-            return self._global_scale.vmin, self._global_scale.vmax
-        return None
+        return self._global_scale.get_scale()
 
     def _get_output_options(self) -> OutputOptions:
         def _safe_pad(var: tk.DoubleVar, default: float = 0.02) -> float:
@@ -652,9 +573,9 @@ class XYValueMapGUI(tk.Toplevel):
             show_cbar=bool(self.show_cbar_var.get()),
             cbar_label=self.cbar_label_var.get().strip(),
             pad_inches=_safe_pad(self.pad_inches_var),
-            title_font_size=_safe_pad(self.title_font_size_var, 12.0),
-            tick_font_size=_safe_pad(self.tick_font_size_var, 10.0),
-            cbar_label_font_size=_safe_pad(self.cbar_label_font_size_var, 10.0),
+            title_font_size=_safe_pad(self.title_font_size_var, DEFAULT_TITLE_FONT_SIZE),
+            tick_font_size=_safe_pad(self.tick_font_size_var, DEFAULT_TICK_FONT_SIZE),
+            cbar_label_font_size=_safe_pad(self.cbar_label_font_size_var, DEFAULT_CBAR_LABEL_FONT_SIZE),
             figsize=tuple(self._figsize),
         )
 
@@ -674,7 +595,7 @@ class XYValueMapGUI(tk.Toplevel):
                 self.preview_fig.set_size_inches(*figsize, forward=True)
             except Exception:
                 pass
-        self._preview_figsize = tuple(figsize)
+        self.state.preview.figsize = tuple(figsize)
 
     def _fit_figsize_to_preview_frame(self, figsize: tuple[float, float]) -> tuple[float, float]:
         """Scale figsize to fit the preview Tk widget while keeping aspect."""
@@ -701,7 +622,7 @@ class XYValueMapGUI(tk.Toplevel):
         if scaled_w_px <= 0 or scaled_h_px <= 0:
             return figsize
         # 中央寄せ用に余白を覚えておく
-        self._preview_pad_px = (
+        self.state.preview.pad_px = (
             max((avail_w - scaled_w_px) / 2.0, 0.0),
             max((avail_h - scaled_h_px) / 2.0, 0.0),
         )
@@ -709,53 +630,35 @@ class XYValueMapGUI(tk.Toplevel):
 
     def _on_preview_configure(self):
         """ウィジェットサイズ変更時に画像を中央に寄せるため再配置"""
-        try:
-            widget = self.preview_canvas.get_tk_widget()
-            avail_w = max(widget.winfo_width(), 1)
-            avail_h = max(widget.winfo_height(), 1)
-        except Exception:
-            return
-        # pad px を設定
-        try:
-            _, height = self.preview_fig.get_size_inches()
-            dpi = self.preview_fig.get_dpi()
-            fig_h_px = height * dpi
-        except Exception:
-            fig_h_px = 0
-        pad_x, pad_y = getattr(self, "_preview_pad_px", (0.0, 0.0))
-        # pack の内部パディングでセンタリング（X方向のみ）
-        try:
-            widget.pack_configure(padx=int(pad_x), pady=int(pad_y))
-        except Exception:
-            pass
+        return self.controller.on_preview_configure()
 
     def _set_manual_scale_vars(self, vmin: float, vmax: float):
-        self._scale_var_lock = True
+        self.state.scale.var_lock = True
         try:
             self.vmin_var.set(vmin)
             self.vmax_var.set(vmax)
         finally:
-            self._scale_var_lock = False
+            self.state.scale.var_lock = False
 
     def _ensure_manual_scale_defaults(self):
-        if self._auto_range is None:
+        if self.state.scale.auto_range is None:
             return
-        auto_min, auto_max = self._auto_range
+        auto_min, auto_max = self.state.scale.auto_range
         try:
             vmin = float(self.vmin_var.get())
             vmax = float(self.vmax_var.get())
         except Exception:
             self._set_manual_scale_vars(auto_min, auto_max)
-            self._scale_ratio = (0.0, 1.0)
+            self.state.scale.ratio = (0.0, 1.0)
             return
         if not np.isfinite(vmin) or not np.isfinite(vmax) or vmin >= vmax:
             self._set_manual_scale_vars(auto_min, auto_max)
-            self._scale_ratio = (0.0, 1.0)
+            self.state.scale.ratio = (0.0, 1.0)
 
     def _clamp_manual_scale(self) -> bool:
-        if self._auto_range is None:
+        if self.state.scale.auto_range is None:
             return False
-        auto_min, auto_max = self._auto_range
+        auto_min, auto_max = self.state.scale.auto_range
         try:
             vmin = float(self.vmin_var.get())
             vmax = float(self.vmax_var.get())
@@ -778,7 +681,7 @@ class XYValueMapGUI(tk.Toplevel):
         return False
 
     def _sync_slider_from_vars(self):
-        if self._slider_lock or self._auto_range is None:
+        if self.state.scale.slider_lock or self.state.scale.auto_range is None:
             return
         if not hasattr(self, "range_slider"):
             return
@@ -787,21 +690,14 @@ class XYValueMapGUI(tk.Toplevel):
             vmax = float(self.vmax_var.get())
         except Exception:
             return
-        self._slider_lock = True
+        self.state.scale.slider_lock = True
         try:
             self.range_slider.set_values(vmin, vmax)
         finally:
-            self._slider_lock = False
+            self.state.scale.slider_lock = False
 
     def _on_range_slider_changed(self, vmin: float, vmax: float):
-        if self.scale_mode.get() != "manual":
-            return
-        if self._slider_lock:
-            return
-        self._set_manual_scale_vars(vmin, vmax)
-        self._update_scale_ratio_from_values(vmin, vmax)
-        self._edit_map_dirty = True
-        self._schedule_view_update()
+        return self.controller.on_range_slider_changed(vmin, vmax)
 
     def _set_auto_range(self, vmin: float, vmax: float):
         if not np.isfinite(vmin) or not np.isfinite(vmax):
@@ -810,9 +706,9 @@ class XYValueMapGUI(tk.Toplevel):
             vmax = vmin + 1e-12
         if vmax < vmin:
             vmin, vmax = vmax, vmin
-        self._auto_range = (float(vmin), float(vmax))
-        ratio = self._clamp_ratio(*self._scale_ratio)
-        self._scale_ratio = ratio
+        self.state.scale.auto_range = (float(vmin), float(vmax))
+        ratio = self._clamp_ratio(*self.state.scale.ratio)
+        self.state.scale.ratio = ratio
         new_vmin, new_vmax = self._values_from_ratio(ratio[0], ratio[1])
         if hasattr(self, "range_slider"):
             self.range_slider.set_range(vmin, vmax, keep_values=False)
@@ -826,7 +722,7 @@ class XYValueMapGUI(tk.Toplevel):
                 self._schedule_view_update()
 
     def _clear_auto_range(self):
-        self._auto_range = None
+        self.state.scale.auto_range = None
         if hasattr(self, "range_slider"):
             self.range_slider.set_enabled(False)
 
@@ -856,35 +752,35 @@ class XYValueMapGUI(tk.Toplevel):
         return rmin, rmax
 
     def _values_from_ratio(self, rmin: float, rmax: float) -> tuple[float, float]:
-        if self._auto_range is None:
+        if self.state.scale.auto_range is None:
             return rmin, rmax
-        auto_min, auto_max = self._auto_range
+        auto_min, auto_max = self.state.scale.auto_range
         span = max(auto_max - auto_min, 1e-12)
         return auto_min + rmin * span, auto_min + rmax * span
 
     def _ratio_from_values(self, vmin: float, vmax: float) -> tuple[float, float]:
-        if self._auto_range is None:
-            return self._scale_ratio
-        auto_min, auto_max = self._auto_range
+        if self.state.scale.auto_range is None:
+            return self.state.scale.ratio
+        auto_min, auto_max = self.state.scale.auto_range
         span = max(auto_max - auto_min, 1e-12)
         rmin = (vmin - auto_min) / span
         rmax = (vmax - auto_min) / span
         return self._clamp_ratio(rmin, rmax)
 
     def _update_scale_ratio_from_values(self, vmin: float, vmax: float):
-        if self._auto_range is None:
+        if self.state.scale.auto_range is None:
             return
-        self._scale_ratio = self._ratio_from_values(vmin, vmax)
+        self.state.scale.ratio = self._ratio_from_values(vmin, vmax)
 
     def _update_scale_ratio_from_vars(self):
-        if self._auto_range is None:
+        if self.state.scale.auto_range is None:
             return
         try:
             vmin = float(self.vmin_var.get())
             vmax = float(self.vmax_var.get())
         except Exception:
             return
-        self._scale_ratio = self._ratio_from_values(vmin, vmax)
+        self.state.scale.ratio = self._ratio_from_values(vmin, vmax)
 
 
     def _get_resolution(self) -> tuple[float, float]:
@@ -898,13 +794,13 @@ class XYValueMapGUI(tk.Toplevel):
         return dx, dy
 
     def _schedule_view_update(self, immediate: bool = False):
-        if hasattr(self, "_preview_job") and self._preview_job:
+        if self.state.preview.job:
             try:
-                self.after_cancel(self._preview_job)
+                self.after_cancel(self.state.preview.job)
             except Exception:
                 pass
         delay = 0 if immediate else 200
-        self._preview_job = self.after(delay, self._update_views)
+        self.state.preview.job = self.after(delay, self._update_views)
 
     def _update_views(self):
         if self._data_source is None or not self._data_ready:
@@ -926,11 +822,11 @@ class XYValueMapGUI(tk.Toplevel):
         current_step = int(self.step_var.get() or 1)
         step = max(1, min(current_step, self._data_source.step_count))
         if step != current_step:
-            self._step_var_lock = True
+            self.state.ui.step_var_lock = True
             try:
                 self.step_var.set(step)
             finally:
-                self._step_var_lock = False
+                self.state.ui.step_var_lock = False
 
         # figsize は固定値を枠内に収まるよう縮小のみ適用
         # ベース figsize を枠内にフィット（出力ではマージンを加味して拡張）
@@ -944,7 +840,7 @@ class XYValueMapGUI(tk.Toplevel):
         self._set_preview_figsize(fitted_figsize)
 
         # global スケールの計算（非同期）
-        if not self._preview_dragging and self._roi_confirmed:
+        if not self.state.preview.dragging and self.state.roi.confirmed:
             self._ensure_global_scale_async(value_col, roi, dx, dy)
 
         try:
@@ -955,11 +851,11 @@ class XYValueMapGUI(tk.Toplevel):
             return
 
         cmap = build_colormap(self.min_color_var.get(), self.max_color_var.get())
-        if self._edit_map_dirty or self._edit_image_id is None:
+        if self.state.edit.map_dirty or self._edit_image_id is None:
             try:
                 # Keep edit background scale tied to full-domain values (ROI independent).
                 self._update_edit_view(frame, value_col, roi, cmap, None)
-                self._edit_map_dirty = False
+                self.state.edit.map_dirty = False
             except Exception as e:
                 self.status_var.set("")
                 messagebox.showerror("エラー", f"編集表示の描画に失敗しました:\n{e}")
@@ -967,7 +863,7 @@ class XYValueMapGUI(tk.Toplevel):
         else:
             self._update_edit_roi_artists(roi)
 
-        if not self._roi_confirmed:
+        if not self.state.roi.confirmed:
             self.status_var.set("ROI確定待ち")
             self._draw_pending_preview(roi, output_opts)
             return
@@ -976,11 +872,9 @@ class XYValueMapGUI(tk.Toplevel):
         self._update_preview_view(frame, value_col, roi, dx, dy, cmap, scale, output_opts)
 
     def _update_preview_view(self, frame, value_col, roi: Roi, dx: float, dy: float, cmap, scale, output_opts):
-        self._last_output_opts = output_opts
+        self.state.preview.last_output_opts = output_opts
         try:
-            x, y, v = frame_to_grids(frame, value_col=value_col)
-            bounds = roi_bounds(roi)
-            grid = slice_grids_to_bounds(x, y, v, bounds=bounds)
+            grid = slice_frame_to_roi_grid(frame, value_col=value_col, roi=roi)
         except Exception as e:
             self.status_var.set("")
             messagebox.showerror("エラー", f"プレビュー描画用データの準備に失敗しました:\n{e}")
@@ -991,41 +885,20 @@ class XYValueMapGUI(tk.Toplevel):
             self._draw_empty_preview(roi, output_opts)
             return None
 
-        dx_p, dy_p = dx, dy
-        status_note = ""
-        if self._preview_dragging:
-            preview_max = 60000
-            base_dx, base_dy = estimate_grid_spacing(grid.x, grid.y)
-            fx = base_dx / dx if dx > 0 else 1.0
-            fy = base_dy / dy if dy > 0 else 1.0
-            if not np.isfinite(fx) or fx <= 0:
-                fx = 1.0
-            if not np.isfinite(fy) or fy <= 0:
-                fy = 1.0
-            est_points = grid.x.size * fx * fy
-            if est_points > preview_max:
-                scale_factor = math.sqrt(est_points / preview_max)
-                dx_p = dx * scale_factor
-                dy_p = dy * scale_factor
-                scale_preview = (self._base_dx / dx_p) if dx_p > 0 else 0.0
-                if scale_preview > 0:
-                    status_note = f"プレビュー軽量化のため解像度倍率を {scale_preview:.3g} に調整しました"
-                else:
-                    status_note = "プレビュー軽量化のため解像度を調整しました"
-
         try:
-            prepared = prepare_rotated_grid_from_grid(
+            prepared = prepare_preview_grid(
                 grid,
                 roi=roi,
-                dx=dx_p,
-                dy=dy_p,
-                local_origin=True,
+                dx=dx,
+                dy=dy,
+                preview_dragging=self.state.preview.dragging,
             )
         except Exception as e:
             self.status_var.set("")
             messagebox.showerror("エラー", f"プレビュー補間の準備に失敗しました:\n{e}")
             return None
-        out_x, out_y, vals_resampled, mask = prepared
+        out_x, out_y, vals_resampled, mask = prepared.x, prepared.y, prepared.values, prepared.mask
+        status_note = prepared.status_note
 
         if not np.any(mask):
             self.status_var.set("ROI内に点がありません")
@@ -1040,7 +913,7 @@ class XYValueMapGUI(tk.Toplevel):
             else:
                 vmin, vmax = 0.0, 1.0
             if not status_note and self.scale_mode.get() == "global":
-                if self._roi_confirmed:
+                if self.state.roi.confirmed:
                     status_note = "globalスケール計算中（暫定表示）"
                 else:
                     status_note = "globalスケール未確定（ROI確定待ち）"
@@ -1065,9 +938,9 @@ class XYValueMapGUI(tk.Toplevel):
         return vmin, vmax
 
     def _update_edit_view(self, frame, value_col, roi: Roi, cmap, scale):
-        self._edit_context = {"step": frame.step, "time": frame.time, "value": value_col}
+        self.state.edit.context = {"step": frame.step, "time": frame.time, "value": value_col}
         edit_cmap = self._edit_colormap()
-        self._edit_render_context = {
+        self.state.edit.render_context = {
             "frame": frame,
             "value_col": value_col,
             "cmap": edit_cmap,
@@ -1077,57 +950,29 @@ class XYValueMapGUI(tk.Toplevel):
         self._update_edit_roi_artists(roi)
 
     def _edit_colormap(self):
-        from matplotlib import colormaps
-
-        return colormaps.get_cmap("Greys")
+        return get_edit_colormap()
 
     def _edit_canvas_size(self) -> tuple[int, int]:
-        if self.edit_canvas is None:
+        if self._edit_canvas_mgr is None:
             return 1, 1
-        width = max(int(self.edit_canvas.winfo_width()), 1)
-        height = max(int(self.edit_canvas.winfo_height()), 1)
-        return width, height
+        return self._edit_canvas_mgr.edit_canvas_size()
 
     def _fit_bounds_to_canvas(
         self, bounds: tuple[float, float, float, float]
     ) -> tuple[float, float, float, float]:
-        xmin, xmax, ymin, ymax = bounds
-        width, height = self._edit_canvas_size()
-        if width <= 0 or height <= 0:
+        if self._edit_canvas_mgr is None:
             return bounds
-        span_x = max(xmax - xmin, 1e-12)
-        span_y = max(ymax - ymin, 1e-12)
-        canvas_ratio = width / height
-        bounds_ratio = span_x / span_y
-        if abs(bounds_ratio - canvas_ratio) < 1e-6:
-            return bounds
-        if bounds_ratio > canvas_ratio:
-            new_span_y = span_x / canvas_ratio
-            pad = (new_span_y - span_y) * 0.5
-            ymin -= pad
-            ymax += pad
-        else:
-            new_span_x = span_y * canvas_ratio
-            pad = (new_span_x - span_x) * 0.5
-            xmin -= pad
-            xmax += pad
-        return xmin, xmax, ymin, ymax
+        return self._edit_canvas_mgr.fit_bounds_to_canvas(bounds)
 
     def _edit_view_bounds_or_base(self) -> tuple[float, float, float, float]:
-        if self._edit_view_bounds is not None:
-            return self._fit_bounds_to_canvas(self._edit_view_bounds)
-        if self._edit_base_bounds is not None:
-            return self._fit_bounds_to_canvas(self._edit_base_bounds)
-        if self._data_source is not None:
-            return self._fit_bounds_to_canvas(self._data_source.domain_bounds)
-        return self._fit_bounds_to_canvas((0.0, 1.0, 0.0, 1.0))
+        if self._edit_canvas_mgr is None:
+            return self._fit_bounds_to_canvas((0.0, 1.0, 0.0, 1.0))
+        return self._edit_canvas_mgr.edit_view_bounds_or_base()
 
     def _roi_edit_bounds(self) -> tuple[float, float, float, float]:
-        if self._edit_base_bounds is not None:
-            return self._fit_bounds_to_canvas(self._edit_base_bounds)
-        if self._data_source is not None:
-            return self._fit_bounds_to_canvas(self._data_source.domain_bounds)
-        return self._fit_bounds_to_canvas((0.0, 1.0, 0.0, 1.0))
+        if self._edit_canvas_mgr is None:
+            return self._fit_bounds_to_canvas((0.0, 1.0, 0.0, 1.0))
+        return self._edit_canvas_mgr.roi_edit_bounds()
 
     def _roi_min_size(self) -> tuple[float, float]:
         min_w = float(self._base_dx)
@@ -1146,37 +991,26 @@ class XYValueMapGUI(tk.Toplevel):
         return clamp_roi_to_bounds(roi, self._roi_edit_bounds())
 
     def _edit_transform(self):
-        xmin, xmax, ymin, ymax = self._edit_view_bounds_or_base()
-        width, height = self._edit_canvas_size()
-        span_x = max(xmax - xmin, 1e-12)
-        span_y = max(ymax - ymin, 1e-12)
-        scale = width / span_x
-        return (xmin, xmax, ymin, ymax), scale, 0.0, 0.0
+        if self._edit_canvas_mgr is None:
+            bounds = self._fit_bounds_to_canvas((0.0, 1.0, 0.0, 1.0))
+            return bounds, 1.0, 0.0, 0.0
+        tr = self._edit_canvas_mgr.edit_transform()
+        return tr.bounds, tr.scale, tr.offset_x, tr.offset_y
 
     def _edit_zoom_ratio(self) -> float:
-        if self._edit_base_bounds is None:
+        if self._edit_canvas_mgr is None:
             return 1.0
-        base = self._fit_bounds_to_canvas(self._edit_base_bounds)
-        view = self._edit_view_bounds_or_base()
-        base_span = max(base[1] - base[0], 1e-12)
-        view_span = max(view[1] - view[0], 1e-12)
-        return base_span / view_span
+        return self._edit_canvas_mgr.edit_zoom_ratio()
 
     def _data_to_canvas(self, x: float, y: float) -> tuple[float, float] | None:
-        (xmin, xmax, ymin, ymax), scale, offset_x, offset_y = self._edit_transform()
-        if scale <= 0:
+        if self._edit_canvas_mgr is None:
             return None
-        cx = offset_x + (x - xmin) * scale
-        cy = offset_y + (ymax - y) * scale
-        return cx, cy
+        return self._edit_canvas_mgr.data_to_canvas(x, y)
 
     def _canvas_to_data(self, cx: float, cy: float) -> tuple[float, float] | None:
-        (xmin, xmax, ymin, ymax), scale, offset_x, offset_y = self._edit_transform()
-        if scale <= 0:
+        if self._edit_canvas_mgr is None:
             return None
-        x = xmin + (cx - offset_x) / scale
-        y = ymax - (cy - offset_y) / scale
-        return x, y
+        return self._edit_canvas_mgr.canvas_to_data(cx, cy)
 
     def _update_canvas_rect(
         self,
@@ -1186,27 +1020,9 @@ class XYValueMapGUI(tk.Toplevel):
         outline: str,
         dash: tuple[int, int] | None = None,
     ) -> int | None:
-        if self.edit_canvas is None:
+        if self._edit_canvas_mgr is None:
             return rect_id
-        xmin, xmax, ymin, ymax = bounds
-        p1 = self._data_to_canvas(xmin, ymax)
-        p2 = self._data_to_canvas(xmax, ymin)
-        if p1 is None or p2 is None:
-            return rect_id
-        if rect_id is None:
-            rect_id = self.edit_canvas.create_rectangle(
-                p1[0],
-                p1[1],
-                p2[0],
-                p2[1],
-                outline=outline,
-                dash=dash,
-                width=1,
-            )
-        else:
-            self.edit_canvas.coords(rect_id, p1[0], p1[1], p2[0], p2[1])
-            self.edit_canvas.itemconfig(rect_id, outline=outline, dash=dash, width=1)
-        return rect_id
+        return self._edit_canvas_mgr.update_canvas_rect(rect_id, bounds, outline=outline, dash=dash)
 
     def _update_canvas_text_with_bg(
         self,
@@ -1218,254 +1034,52 @@ class XYValueMapGUI(tk.Toplevel):
         y: float,
         anchor: str,
     ) -> tuple[int | None, int | None]:
-        if self.edit_canvas is None:
+        if self._edit_canvas_mgr is None:
             return text_id, bg_id
-        if text_id is None:
-            text_id = self.edit_canvas.create_text(
-                x,
-                y,
-                anchor=anchor,
-                text=text,
-                fill="#333333",
-                font=("TkDefaultFont", 9),
-            )
-        else:
-            self.edit_canvas.coords(text_id, x, y)
-            self.edit_canvas.itemconfig(
-                text_id,
-                text=text,
-                anchor=anchor,
-                fill="#333333",
-                font=("TkDefaultFont", 9),
-            )
-        bbox = self.edit_canvas.bbox(text_id)
-        if bbox:
-            pad = 3
-            rect_coords = (bbox[0] - pad, bbox[1] - pad, bbox[2] + pad, bbox[3] + pad)
-            if bg_id is None:
-                bg_id = self.edit_canvas.create_rectangle(
-                    *rect_coords,
-                    fill="#ffffff",
-                    outline="#dddddd",
-                    width=1,
-                )
-            else:
-                self.edit_canvas.coords(bg_id, *rect_coords)
-                self.edit_canvas.itemconfig(bg_id, fill="#ffffff", outline="#dddddd", width=1)
-            self.edit_canvas.tag_lower(bg_id, text_id)
-        return text_id, bg_id
+        return self._edit_canvas_mgr.update_canvas_text_with_bg(text_id, bg_id, text, x=x, y=y, anchor=anchor)
 
     def _update_edit_bounds_overlay(self):
-        if self.edit_canvas is None or self._data_source is None:
+        if self._edit_canvas_mgr is None:
             return
-        if self._edit_domain_rect_id is not None:
-            self.edit_canvas.delete(self._edit_domain_rect_id)
-            self._edit_domain_rect_id = None
-        if self._edit_pad_rect_id is not None:
-            self.edit_canvas.delete(self._edit_pad_rect_id)
-            self._edit_pad_rect_id = None
+        return self._edit_canvas_mgr.update_edit_bounds_overlay()
 
     def _update_edit_overlay_text(self):
-        if self.edit_canvas is None:
+        if self._edit_canvas_mgr is None:
             return
-        step = self._edit_context.get("step")
-        time_val = self._edit_context.get("time")
-        value_col = self._edit_context.get("value")
-        zoom = self._edit_zoom_ratio()
-
-        lines = ["編集ビュー（全体表示）", "表示: 全体+余白"]
-        if step is not None:
-            if time_val is None:
-                lines.append(f"step={step}  value={value_col}")
-            else:
-                lines.append(f"step={step}  t={time_val:g}  value={value_col}")
-        lines.append("スケール: 全体min/max（1ステップ）")
-        lines.append(f"ズーム: {zoom:.2f}x")
-        text = "\n".join(lines)
-
-        self._edit_overlay_text_id, self._edit_overlay_bg_id = self._update_canvas_text_with_bg(
-            self._edit_overlay_text_id,
-            self._edit_overlay_bg_id,
-            text,
-            x=8,
-            y=6,
-            anchor="nw",
-        )
-
-        guide = "ドラッグ: 移動\nハンドル: 拡縮 / 回転\nCtrl+ホイール: ズーム"
-        width, height = self._edit_canvas_size()
-        self._edit_hint_text_id, self._edit_hint_bg_id = self._update_canvas_text_with_bg(
-            self._edit_hint_text_id,
-            self._edit_hint_bg_id,
-            guide,
-            x=8,
-            y=height - 6,
-            anchor="sw",
-        )
+        return self._edit_canvas_mgr.update_edit_overlay_text()
 
     def _update_edit_overlay(self):
-        if self.edit_canvas is None:
+        if self._edit_canvas_mgr is None:
             return
-        self._update_edit_outline()
-        self._update_edit_bounds_overlay()
-        if self._roi_patch is not None:
-            if self._edit_pad_rect_id is not None:
-                self.edit_canvas.tag_lower(self._edit_pad_rect_id, self._roi_patch)
-            if self._edit_domain_rect_id is not None:
-                self.edit_canvas.tag_lower(self._edit_domain_rect_id, self._roi_patch)
-        self._update_edit_overlay_text()
-        for item_id in (
-            self._edit_overlay_bg_id,
-            self._edit_overlay_text_id,
-            self._edit_hint_bg_id,
-            self._edit_hint_text_id,
-        ):
-            if item_id is not None:
-                self.edit_canvas.tag_raise(item_id)
+        return self._edit_canvas_mgr.update_edit_overlay()
 
     def _compute_grid_outline(self, grid: RoiGrid) -> np.ndarray | None:
-        try:
-            x = np.asarray(grid.x, dtype=float)
-            y = np.asarray(grid.y, dtype=float)
-        except Exception:
+        if self._edit_canvas_mgr is None:
             return None
-        if x.size == 0 or y.size == 0:
-            return None
-        top = np.column_stack([x[0, :], y[0, :]])
-        right = np.column_stack([x[1:, -1], y[1:, -1]])
-        bottom = np.column_stack([x[-1, -2::-1], y[-1, -2::-1]])
-        left = np.column_stack([x[-2:0:-1, 0], y[-2:0:-1, 0]])
-        outline = np.vstack([top, right, bottom, left, top[:1]])
-        return outline
+        return self._edit_canvas_mgr.compute_grid_outline(grid)
 
     def _update_edit_outline(self):
-        if self.edit_canvas is None:
+        if self._edit_canvas_mgr is None:
             return
-        outline = self._edit_outline_points
-        if outline is None or outline.size == 0:
-            if self._edit_outline_id is not None:
-                self.edit_canvas.delete(self._edit_outline_id)
-                self._edit_outline_id = None
-            return
-        coords: list[float] = []
-        for x, y in outline:
-            pt = self._data_to_canvas(float(x), float(y))
-            if pt is None:
-                continue
-            coords.extend([pt[0], pt[1]])
-        if len(coords) < 4:
-            return
-        if self._edit_outline_id is None:
-            self._edit_outline_id = self.edit_canvas.create_line(
-                *coords,
-                fill="#666666",
-                width=1,
-                smooth=False,
-            )
-        else:
-            self.edit_canvas.coords(self._edit_outline_id, *coords)
-            self.edit_canvas.itemconfig(self._edit_outline_id, fill="#666666", width=1)
+        return self._edit_canvas_mgr.update_edit_outline()
 
     def _render_edit_background(self, frame, value_col, cmap, scale):
-        width, height = self._edit_canvas_size()
-        if width < 2 or height < 2:
+        if self._edit_canvas_mgr is None:
             return
-
-        x, y, v = frame_to_grids(frame, value_col=value_col)
-        grid = RoiGrid(x=x, y=y, v=v, mask=np.ones_like(v, dtype=bool))
-        grid = downsample_grid_for_preview(grid, max_points=40000)
-        self._edit_outline_points = self._compute_grid_outline(grid)
-
-        vals = np.asarray(grid.v, dtype=float)
-        if scale is None:
-            finite = vals[np.isfinite(vals)]
-            if finite.size:
-                vmin, vmax = float(finite.min()), float(finite.max())
-            else:
-                vmin, vmax = 0.0, 1.0
-        else:
-            vmin, vmax = scale
-
-        from matplotlib.backends.backend_agg import FigureCanvasAgg
-        from matplotlib.figure import Figure
-
-        dpi = 100
-        if self._edit_fig is None:
-            self._edit_fig = Figure(figsize=(width / dpi, height / dpi), dpi=dpi)
-            self._edit_ax = self._edit_fig.add_axes([0, 0, 1, 1])
-            self._edit_agg = FigureCanvasAgg(self._edit_fig)
-        else:
-            self._edit_fig.set_size_inches(width / dpi, height / dpi, forward=True)
-
-        ax = self._edit_ax
-        ax.clear()
-        ax.set_axis_off()
-        ax.set_aspect("equal", adjustable="box")
-        bounds = self._edit_view_bounds_or_base()
-        ax.set_xlim(bounds[0], bounds[1])
-        ax.set_ylim(bounds[2], bounds[3])
-        ax.pcolormesh(
-            grid.x,
-            grid.y,
-            vals,
-            cmap=cmap,
-            vmin=vmin,
-            vmax=vmax,
-            shading="gouraud",
-        )
-
-        assert self._edit_agg is not None
-        self._edit_agg.draw()
-        buf = io.BytesIO()
-        self._edit_agg.print_png(buf)
-        png_data = base64.b64encode(buf.getvalue()).decode("ascii")
-        self._edit_image_tk = tk.PhotoImage(data=png_data)
-
-        if self._edit_image_id is None:
-            self._edit_image_id = self.edit_canvas.create_image(0, 0, anchor="nw", image=self._edit_image_tk)
-        else:
-            self.edit_canvas.itemconfig(self._edit_image_id, image=self._edit_image_tk)
-        self.edit_canvas.tag_lower(self._edit_image_id)
-        self._update_edit_outline()
+        return self._edit_canvas_mgr.render_edit_background(frame, value_col, cmap, scale)
 
     def _schedule_edit_background_render(self, immediate: bool = False):
-        if self._edit_render_context is None:
+        if self._edit_canvas_mgr is None:
             return
-        if self._edit_render_job is not None:
-            try:
-                self.after_cancel(self._edit_render_job)
-            except Exception:
-                pass
-        delay = 0 if immediate else 120
-        self._edit_render_job = self.after(delay, self._render_edit_background_from_context)
+        return self._edit_canvas_mgr.schedule_edit_background_render(immediate)
 
     def _render_edit_background_from_context(self):
-        self._edit_render_job = None
-        context = self._edit_render_context
-        if context is None:
+        if self._edit_canvas_mgr is None:
             return
-        self._render_edit_background(
-            context["frame"],
-            context["value_col"],
-            context["cmap"],
-            context["scale"],
-        )
-        self._edit_map_dirty = False
+        return self._edit_canvas_mgr.render_edit_background_from_context()
 
     def _on_edit_configure(self, _event):
-        if self._data_source is None:
-            return
-        if self._edit_view_bounds is not None:
-            self._edit_view_bounds = self._fit_bounds_to_canvas(self._edit_view_bounds)
-        elif self._edit_base_bounds is not None:
-            self._edit_view_bounds = self._fit_bounds_to_canvas(self._edit_base_bounds)
-        self._edit_map_dirty = True
-        self._schedule_edit_background_render()
-        try:
-            roi = self._get_roi()
-        except Exception:
-            return
-        self._update_edit_roi_artists(roi)
+        return self.controller.on_edit_configure(_event)
 
     def _set_roi_vars(self, roi: Roi):
         angle = float(roi.angle_deg)
@@ -1473,7 +1087,7 @@ class XYValueMapGUI(tk.Toplevel):
             angle += 360
         while angle > 180:
             angle -= 360
-        self._roi_var_lock = True
+        self.state.roi.var_lock = True
         try:
             self.cx_var.set(roi.cx)
             self.cy_var.set(roi.cy)
@@ -1481,7 +1095,7 @@ class XYValueMapGUI(tk.Toplevel):
             self.height_var.set(roi.height)
             self.angle_var.set(angle)
         finally:
-            self._roi_var_lock = False
+            self.state.roi.var_lock = False
 
     def _apply_roi_update(
         self,
@@ -1496,9 +1110,9 @@ class XYValueMapGUI(tk.Toplevel):
         if update_vars:
             self._set_roi_vars(roi)
         if confirm is True:
-            self._roi_confirmed = True
+            self.state.roi.confirmed = True
         elif confirm is False:
-            self._roi_confirmed = False
+            self.state.roi.confirmed = False
         self._update_edit_roi_artists(roi)
         if invalidate_scale:
             self._invalidate_global_scale()
@@ -1506,138 +1120,16 @@ class XYValueMapGUI(tk.Toplevel):
             self._schedule_view_update()
 
     def _reset_edit_view(self):
-        if self._edit_base_bounds is None:
+        if self.state.edit.base_bounds is None:
             return
-        self._edit_view_bounds = self._fit_bounds_to_canvas(self._edit_base_bounds)
-        self._edit_map_dirty = True
+        self.state.edit.view_bounds = self._fit_bounds_to_canvas(self.state.edit.base_bounds)
+        self.state.edit.map_dirty = True
         self._schedule_edit_background_render(immediate=True)
 
     def _update_edit_roi_artists(self, roi: Roi):
-        if self.edit_canvas is None:
+        if self._edit_canvas_mgr is None:
             return
-        corners = roi_corners(roi)
-        canvas_corners = []
-        for x, y in corners:
-            pt = self._data_to_canvas(float(x), float(y))
-            if pt is None:
-                return
-            canvas_corners.extend([pt[0], pt[1]])
-
-        theta = math.radians(roi.angle_deg)
-        ux = np.array([math.cos(theta), math.sin(theta)])
-        uy = np.array([-math.sin(theta), math.cos(theta)])
-        half_w = 0.5 * roi.width
-        half_h = 0.5 * roi.height
-        width_vec = half_w * ux
-        height_vec = half_h * uy
-
-        handle_radius = 6.0
-        (_, _, _, _), scale, _, _ = self._edit_transform()
-        if scale <= 0:
-            scale = 1.0
-        rotate_offset_px = max(handle_radius * 3.0, 18.0)
-        rotate_offset = rotate_offset_px / scale
-        rotate_vec = (half_h + rotate_offset) * uy
-        handles = [
-            ("width", 1, roi.cx + width_vec[0], roi.cy + width_vec[1]),
-            ("width", -1, roi.cx - width_vec[0], roi.cy - width_vec[1]),
-            ("height", 1, roi.cx + height_vec[0], roi.cy + height_vec[1]),
-            ("height", -1, roi.cx - height_vec[0], roi.cy - height_vec[1]),
-            ("rotate", 0, roi.cx + rotate_vec[0], roi.cy + rotate_vec[1]),
-        ]
-
-        bottom_start = self._data_to_canvas(float(corners[0, 0]), float(corners[0, 1]))
-        bottom_end = self._data_to_canvas(float(corners[1, 0]), float(corners[1, 1]))
-        top_center = np.array([roi.cx, roi.cy]) + height_vec
-        rotate_pos = np.array([roi.cx + rotate_vec[0], roi.cy + rotate_vec[1]])
-        top_center_canvas = self._data_to_canvas(float(top_center[0]), float(top_center[1]))
-        rotate_canvas = self._data_to_canvas(float(rotate_pos[0]), float(rotate_pos[1]))
-
-        if self._roi_patch is None:
-            self._roi_patch = self.edit_canvas.create_polygon(
-                canvas_corners,
-                outline="#ffcc00",
-                width=2,
-                fill="",
-                joinstyle=tk.ROUND,
-            )
-            self._roi_bottom_edge = self.edit_canvas.create_line(
-                0,
-                0,
-                0,
-                0,
-                fill="#00bcd4",
-                width=3,
-            )
-            self._roi_rotate_line = self.edit_canvas.create_line(
-                0,
-                0,
-                0,
-                0,
-                fill="#00bcd4",
-                width=1,
-            )
-            self._roi_handles = []
-            for _ in range(5):
-                hid = self.edit_canvas.create_oval(
-                    0,
-                    0,
-                    0,
-                    0,
-                    fill="#ffcc00",
-                    outline="#333333",
-                    width=1,
-                )
-                self._roi_handles.append({"id": hid, "kind": "width", "sign": 1, "cx": 0.0, "cy": 0.0})
-        else:
-            self.edit_canvas.coords(self._roi_patch, *canvas_corners)
-
-        if self._roi_bottom_edge is not None and bottom_start and bottom_end:
-            self.edit_canvas.coords(
-                self._roi_bottom_edge,
-                bottom_start[0],
-                bottom_start[1],
-                bottom_end[0],
-                bottom_end[1],
-            )
-        if self._roi_rotate_line is not None and top_center_canvas and rotate_canvas:
-            self.edit_canvas.coords(
-                self._roi_rotate_line,
-                top_center_canvas[0],
-                top_center_canvas[1],
-                rotate_canvas[0],
-                rotate_canvas[1],
-            )
-
-        for handle, (kind, sign, hx, hy) in zip(self._roi_handles, handles):
-            pos = self._data_to_canvas(float(hx), float(hy))
-            if pos is None:
-                continue
-            handle["kind"] = kind
-            handle["sign"] = sign
-            handle["cx"] = pos[0]
-            handle["cy"] = pos[1]
-            hid = handle["id"]
-            self.edit_canvas.coords(
-                hid,
-                pos[0] - handle_radius,
-                pos[1] - handle_radius,
-                pos[0] + handle_radius,
-                pos[1] + handle_radius,
-            )
-            fill = "#00bcd4" if kind == "rotate" else "#ffcc00"
-            self.edit_canvas.itemconfig(hid, fill=fill)
-
-        if self._roi_patch is not None:
-            self.edit_canvas.tag_raise(self._roi_patch)
-        if self._roi_bottom_edge is not None:
-            self.edit_canvas.tag_raise(self._roi_bottom_edge)
-        if self._roi_rotate_line is not None:
-            self.edit_canvas.tag_raise(self._roi_rotate_line)
-        for handle in self._roi_handles:
-            self.edit_canvas.tag_raise(handle["id"])
-
-        self._update_edit_overlay()
+        return self._edit_canvas_mgr.update_edit_roi_artists(roi)
 
     def _hit_test_handle(self, event):
         if not self._roi_handles:
@@ -1670,196 +1162,16 @@ class XYValueMapGUI(tk.Toplevel):
         return inside
 
     def _on_edit_press(self, event):
-        if self._data_source is None:
-            return
-        if event.num != 1:
-            return
-        pos = self._canvas_to_data(event.x, event.y)
-        if pos is None:
-            return
-        try:
-            roi = self._get_roi()
-        except Exception:
-            return
-        handle = self._hit_test_handle(event)
-        if handle:
-            self._drag_state = {"mode": "handle", "kind": handle.get("kind"), "sign": handle.get("sign")}
-            return
-        if self._point_in_polygon(pos[0], pos[1], roi_corners(roi)):
-            self._drag_state = {
-                "mode": "move",
-                "offset": (roi.cx - pos[0], roi.cy - pos[1]),
-            }
+        return self.controller.on_edit_press(event)
 
     def _on_edit_motion(self, event):
-        if self._data_source is None:
-            return
-        if self._drag_state is None:
-            return
-        pos = self._canvas_to_data(event.x, event.y)
-        if pos is None:
-            return
-        try:
-            roi = self._get_roi()
-        except Exception:
-            return
-        xdata, ydata = pos
-
-        mode = self._drag_state.get("mode")
-        if mode == "move":
-            offset = self._drag_state.get("offset", (0.0, 0.0))
-            new_roi = Roi(
-                cx=xdata + offset[0],
-                cy=ydata + offset[1],
-                width=roi.width,
-                height=roi.height,
-                angle_deg=roi.angle_deg,
-            )
-            self._drag_state["roi"] = new_roi
-            self._apply_roi_update(new_roi, schedule_views=False, invalidate_scale=False, confirm=False)
-            self._preview_dragging = True
-            return
-
-        if mode == "handle":
-            kind = self._drag_state.get("kind")
-            sign = float(self._drag_state.get("sign") or 0.0)
-            vx = xdata - roi.cx
-            vy = ydata - roi.cy
-            min_size = 1e-9
-
-            theta = math.radians(roi.angle_deg)
-            ux = np.array([math.cos(theta), math.sin(theta)])
-            uy = np.array([-math.sin(theta), math.cos(theta)])
-
-            if kind == "rotate":
-                angle = math.degrees(math.atan2(vy, vx)) - 90.0
-                new_roi = Roi(
-                    cx=roi.cx,
-                    cy=roi.cy,
-                    width=roi.width,
-                    height=roi.height,
-                    angle_deg=angle,
-                )
-            elif kind == "width":
-                half_w = 0.5 * roi.width
-                opposite_edge = np.array([roi.cx, roi.cy]) - sign * half_w * ux
-                proj = np.dot(np.array([xdata, ydata]) - opposite_edge, ux)
-                if sign >= 0:
-                    proj = max(proj, min_size)
-                else:
-                    proj = min(proj, -min_size)
-                half_new = abs(proj) * 0.5
-                new_center = opposite_edge + ux * (proj * 0.5)
-                new_roi = Roi(
-                    cx=float(new_center[0]),
-                    cy=float(new_center[1]),
-                    width=float(half_new * 2.0),
-                    height=roi.height,
-                    angle_deg=roi.angle_deg,
-                )
-            elif kind == "height":
-                half_h = 0.5 * roi.height
-                opposite_edge = np.array([roi.cx, roi.cy]) - sign * half_h * uy
-                proj = np.dot(np.array([xdata, ydata]) - opposite_edge, uy)
-                if sign >= 0:
-                    proj = max(proj, min_size)
-                else:
-                    proj = min(proj, -min_size)
-                half_new = abs(proj) * 0.5
-                new_center = opposite_edge + uy * (proj * 0.5)
-                new_roi = Roi(
-                    cx=float(new_center[0]),
-                    cy=float(new_center[1]),
-                    width=roi.width,
-                    height=float(half_new * 2.0),
-                    angle_deg=roi.angle_deg,
-                )
-            else:
-                return
-            self._drag_state["roi"] = new_roi
-            self._apply_roi_update(new_roi, schedule_views=False, invalidate_scale=False, confirm=False)
-            self._preview_dragging = True
+        return self.controller.on_edit_motion(event)
 
     def _on_edit_release(self, event):
-        if self._data_source is None:
-            return
-        if self._drag_state is None:
-            return
-        roi = self._drag_state.get("roi")
-        self._drag_state = None
-        self._preview_dragging = False
-        if roi is not None:
-            self._apply_roi_update(roi, schedule_views=True, invalidate_scale=True, confirm=True)
-            self._schedule_view_update(immediate=True)
+        return self.controller.on_edit_release(event)
 
     def _on_edit_scroll(self, event):
-        if self._data_source is None:
-            return
-        if event.state & 0x0004 == 0:
-            return
-        pos = self._canvas_to_data(event.x, event.y)
-        if pos is None:
-            return
-
-        xmin, xmax, ymin, ymax = self._edit_view_bounds_or_base()
-        cur_w = xmax - xmin
-        cur_h = ymax - ymin
-        if cur_w <= 0 or cur_h <= 0:
-            return
-        delta = getattr(event, "delta", 0)
-        direction = 1 if delta > 0 or getattr(event, "num", None) == 4 else -1
-        zoom = 0.9 if direction > 0 else 1.1
-        new_w = cur_w * zoom
-        new_h = cur_h * zoom
-        relx = (pos[0] - xmin) / cur_w
-        rely = (pos[1] - ymin) / cur_h
-
-        base_fit = None
-        if self._edit_base_bounds is not None:
-            base_fit = self._fit_bounds_to_canvas(self._edit_base_bounds)
-            base_w = base_fit[1] - base_fit[0]
-            base_h = base_fit[3] - base_fit[2]
-            new_w = min(new_w, base_w)
-            new_h = min(new_h, base_h)
-
-        new_xmin = pos[0] - new_w * relx
-        new_xmax = pos[0] + new_w * (1 - relx)
-        new_ymin = pos[1] - new_h * rely
-        new_ymax = pos[1] + new_h * (1 - rely)
-
-        if base_fit is not None:
-            bxmin, bxmax, bymin, bymax = base_fit
-            if new_w >= (bxmax - bxmin):
-                new_xmin, new_xmax = bxmin, bxmax
-            else:
-                if new_xmin < bxmin:
-                    shift = bxmin - new_xmin
-                    new_xmin += shift
-                    new_xmax += shift
-                if new_xmax > bxmax:
-                    shift = new_xmax - bxmax
-                    new_xmin -= shift
-                    new_xmax -= shift
-            if new_h >= (bymax - bymin):
-                new_ymin, new_ymax = bymin, bymax
-            else:
-                if new_ymin < bymin:
-                    shift = bymin - new_ymin
-                    new_ymin += shift
-                    new_ymax += shift
-                if new_ymax > bymax:
-                    shift = new_ymax - bymax
-                    new_ymin -= shift
-                    new_ymax -= shift
-
-        self._edit_view_bounds = (new_xmin, new_xmax, new_ymin, new_ymax)
-        self._edit_map_dirty = True
-        self._schedule_edit_background_render()
-        try:
-            roi = self._get_roi()
-            self._update_edit_roi_artists(roi)
-        except Exception:
-            pass
+        return self.controller.on_edit_scroll(event)
 
     def _draw_empty_preview(
         self,
@@ -1868,21 +1180,13 @@ class XYValueMapGUI(tk.Toplevel):
         *,
         title: str = "No points in ROI",
     ):
-        self._reset_preview_axes()
-        opts = output_opts or self._last_output_opts
+        if self._preview_renderer is None:
+            return
+        opts = output_opts or self.state.preview.last_output_opts
         if opts is None:
             opts = self._get_output_options()
-        self._apply_plot_options(ax=self.preview_ax, mesh=None, output_opts=opts)
-        title = title if opts.show_title else ""
-        self.preview_ax.set_title(title)
-        width = max(float(roi.width), 1e-12)
-        height = max(float(roi.height), 1e-12)
-        self.preview_ax.set_xlim(0.0, width)
-        self.preview_ax.set_ylim(0.0, height)
-        self.preview_ax.set_aspect("equal", adjustable="box")
-        pad_inches = opts.pad_inches if opts else 0.02
-        self.preview_canvas.draw_idle()
-        self._update_tight_bbox_overlay(pad_inches=pad_inches)
+        self._preview_renderer.draw_empty_preview(roi, output_opts=opts, title=title)
+        self._sync_preview_renderer_state()
 
     def _draw_pending_preview(self, roi: Roi, output_opts: dict[str, object] | None = None):
         self._draw_empty_preview(roi, output_opts, title="ROI not confirmed")
@@ -1902,270 +1206,102 @@ class XYValueMapGUI(tk.Toplevel):
         vmax: float,
         output_opts: OutputOptions,
     ):
-        self._reset_preview_axes()
-        title = self._build_plot_title(step=step, t=t, value_col=value_col, output_opts=output_opts)
-        self.mesh = render_xy_value_map(
-            fig=self.preview_fig,
-            ax=self.preview_ax,
+        if self._preview_renderer is None:
+            return
+        self._preview_renderer.draw_preview(
             x=x,
             y=y,
             vals=vals,
             roi=roi,
+            value_col=value_col,
+            step=step,
+            t=t,
             cmap=cmap,
             vmin=vmin,
             vmax=vmax,
-            title=title,
-            show_ticks=output_opts.show_ticks,
-            show_frame=output_opts.show_frame,
-            show_cbar=output_opts.show_cbar,
-            cbar_label=output_opts.cbar_label,
-            title_font_size=output_opts.title_font_size,
-            tick_font_size=output_opts.tick_font_size,
-            cbar_label_font_size=output_opts.cbar_label_font_size,
+            output_opts=output_opts,
         )
-        pad_inches = output_opts.pad_inches
-        self.preview_canvas.draw_idle()
-        self._update_tight_bbox_overlay(pad_inches=pad_inches)
+        self._sync_preview_renderer_state()
 
     def _reset_preview_axes(self):
         """Clear preview axes and colorbar to avoid leftover artists/clipping."""
-        try:
-            face = self.preview_fig.get_facecolor()
-        except Exception:
-            face = None
-        try:
-            self.preview_fig.clf()
-        except Exception:
-            pass
-        try:
-            self.preview_ax = self.preview_fig.add_subplot(111)
-        except Exception:
-            pass
-        if face is not None:
-            try:
-                self.preview_fig.patch.set_facecolor(face)
-            except Exception:
-                pass
-        self.cbar = None
-        self.mesh = None
-        self._tight_rect = None
+        if self._preview_renderer is None:
+            return
+        self._preview_renderer.reset_axes()
+        self._sync_preview_renderer_state()
 
     def _update_tight_bbox_overlay(self, pad_inches: float = 0.02):
         """Preview 用: bbox_inches=\"tight\" 相当の領域を破線で可視化する。"""
-        try:
-            fig = self.preview_fig
-            canvas = self.preview_canvas
-            if fig is None or canvas is None:
-                return
-            # 既存の枠を除去
-            if self._tight_rect is not None:
-                try:
-                    self._tight_rect.remove()
-                except Exception:
-                    pass
-                self._tight_rect = None
-
-            canvas.draw()
-            renderer = canvas.get_renderer()
-            if renderer is None:
-                return
-
-            from matplotlib.transforms import Bbox
-
-            tight = fig.get_tightbbox(renderer)
-            fig_box = fig.get_window_extent(renderer)
-            if tight is None or fig_box is None:
-                return
-            dpi = fig.get_dpi()
-            pad_px = max(pad_inches, 0.0) * dpi
-            # tight はインチベースなのでピクセルに変換
-            tight_px = tight.transformed(fig.dpi_scale_trans)
-            bbox = Bbox.from_extents(
-                tight_px.x0 - pad_px, tight_px.y0 - pad_px, tight_px.x1 + pad_px, tight_px.y1 + pad_px
-            )
-
-            # Figure ウィンドウ座標系で正規化（0-1）
-            w_fig = fig_box.width
-            h_fig = fig_box.height
-            if w_fig <= 0 or h_fig <= 0:
-                return
-            x0 = (bbox.x0 - fig_box.x0) / w_fig
-            y0 = (bbox.y0 - fig_box.y0) / h_fig
-            width = bbox.width / w_fig
-            height = bbox.height / h_fig
-            if width <= 0 or height <= 0:
-                return
-
-            from matplotlib.patches import Rectangle
-
-            rect = Rectangle(
-                (x0, y0),
-                width,
-                height,
-                transform=fig.transFigure,
-                fill=False,
-                edgecolor="#808080",
-                linestyle="--",
-                linewidth=1.0,
-                zorder=20,
-            )
-            rect.set_clip_on(False)
-            fig.add_artist(rect)
-            self._tight_rect = rect
-            canvas.draw_idle()
-        except Exception:
-            pass
+        if self._preview_renderer is None:
+            return
+        self._preview_renderer.update_tight_bbox_overlay(pad_inches=pad_inches)
+        self._sync_preview_renderer_state()
 
     def _build_plot_title(self, *, step: int, t: float, value_col: str, output_opts: OutputOptions) -> str:
-        if not output_opts.show_title:
+        if self._preview_renderer is None:
             return ""
-        if output_opts.title_text:
-            return output_opts.title_text
-        return ""
+        return self._preview_renderer.build_plot_title(step=step, t=t, value_col=value_col, output_opts=output_opts)
 
     def _apply_plot_options(self, *, ax, mesh, output_opts: OutputOptions):
-        show_ticks = bool(output_opts.show_ticks)
-        show_frame = bool(output_opts.show_frame)
-        show_cbar = bool(output_opts.show_cbar)
+        if self._preview_renderer is None:
+            return
+        self._preview_renderer.apply_plot_options(mesh=mesh, output_opts=output_opts)
+        self._sync_preview_renderer_state()
 
-        ax.tick_params(
-            bottom=show_ticks,
-            left=show_ticks,
-            labelbottom=show_ticks,
-            labelleft=show_ticks,
-        )
-
-        for spine in ax.spines.values():
-            spine.set_visible(show_frame)
-
-        if show_cbar:
-            # 既存カラーバーを掃除してから作り直す
-            if self.cbar is not None:
-                try:
-                    self.cbar.remove()
-                except Exception:
-                    pass
-                self.cbar = None
-            if mesh is None:
-                return
-            try:
-                bbox = ax.get_position()
-                cb_width = 0.03
-                cb_pad = 0.005
-                cax = self.preview_fig.add_axes(
-                    [
-                        bbox.x1 + cb_pad,
-                        bbox.y0,
-                        cb_width,
-                        bbox.height,
-                    ]
-                )
-                self.cbar = self.preview_fig.colorbar(mesh, cax=cax)
-                cbar_label = output_opts.cbar_label
-                if cbar_label:
-                    try:
-                        self.cbar.ax.set_ylabel(
-                            cbar_label,
-                            fontsize=output_opts.cbar_label_font_size,
-                            rotation=270,
-                            labelpad=10,
-                        )
-                    except Exception:
-                        pass
-                tick_fs = output_opts.tick_font_size
-                if tick_fs is not None:
-                    try:
-                        self.cbar.ax.tick_params(labelsize=tick_fs)
-                    except Exception:
-                        pass
-            except Exception:
-                self.cbar = None
-        else:
-            if self.cbar is not None:
-                try:
-                    self.cbar.remove()
-                except Exception:
-                    pass
-                self.cbar = None
+    def _sync_preview_renderer_state(self):
+        if self._preview_renderer is None:
+            return
+        self.preview_ax = self._preview_renderer.ax
+        self.mesh = self._preview_renderer.mesh
+        self.cbar = self._preview_renderer.cbar
+        self._tight_rect = self._preview_renderer.tight_rect
 
 
     def _get_preview_frame(self, step: int, value_col: str):
-        key = (step, value_col)
-        if key in self._preview_frame_cache:
-            return self._preview_frame_cache[key]
         if self._data_source is None:
             raise RuntimeError("データが読み込まれていません。")
-        frame = self._data_source.get_frame(step=step, value_col=value_col)
-        self._preview_frame_cache[key] = frame
-        return frame
+        return self._preview_frame_cache.get_or_fetch(
+            data_source=self._data_source,
+            step=step,
+            value_col=value_col,
+        )
 
     def _ensure_global_scale_async(self, value_col: str, roi: Roi, dx: float, dy: float):
         if self._data_source is None:
             return
-        if self._global_scale.running:
-            return
-        if self._global_scale.vmin is not None and self._global_scale.vmax is not None:
-            return
 
-        self._global_scale.running = True
-        self._global_scale.token += 1
-        token = self._global_scale.token
-        self.status_var.set("globalスケール計算中...")
+        def on_status(text: str):
+            self.status_var.set(text)
 
-        def worker():
-            try:
-                vmin, vmax = compute_global_value_range_rotated(
-                    self._data_source,
-                    value_col=value_col,
-                    roi=roi,
-                    dx=dx,
-                    dy=dy,
-                )
-            except ValueError as e:
-                logger.info("globalスケール計算をスキップ: %s", e)
+        def on_empty():
+            self._clear_auto_range()
+            self.status_var.set("ROI内に有効な値がありません。")
 
-                def on_empty():
-                    token_matches = token == self._global_scale.token
-                    self._global_scale.running = False
-                    if not token_matches:
-                        self._schedule_view_update(immediate=True)
-                        return
-                    self._clear_auto_range()
-                    self.status_var.set("ROI内に有効な値がありません。")
+        def on_error(err: Exception):
+            logger.exception("globalスケール計算に失敗")
+            self.status_var.set("")
+            messagebox.showerror("エラー", f"globalスケール計算に失敗しました:\n{err}")
 
-                self.after(0, on_empty)
-                return
-            except Exception as e:
-                err = e
-                logger.exception("globalスケール計算に失敗")
+        def on_done(vmin: float, vmax: float):
+            self.status_var.set("")
+            self._set_auto_range(vmin, vmax)
 
-                def on_err(err=err):
-                    token_matches = token == self._global_scale.token
-                    self._global_scale.running = False
-                    self.status_var.set("")
-                    # 既にパラメータが変わっている場合は無視して再計算に任せる
-                    if not token_matches:
-                        self._schedule_view_update(immediate=True)
-                        return
-                    messagebox.showerror("エラー", f"globalスケール計算に失敗しました:\n{err}")
+        def on_token_mismatch():
+            self._schedule_view_update(immediate=True)
 
-                self.after(0, on_err)
-                return
-
-            def on_done():
-                token_matches = token == self._global_scale.token
-                self._global_scale.running = False
-                self.status_var.set("")
-                if token_matches:
-                    self._global_scale.vmin = vmin
-                    self._global_scale.vmax = vmax
-                    self._set_auto_range(vmin, vmax)
-                # token 不一致の場合は最新のROI/Valueで再計算する
-                self._schedule_view_update(immediate=True)
-
-            self.after(0, on_done)
-
-        threading.Thread(target=worker, daemon=True).start()
+        self._global_scale.ensure_async(
+            data_source=self._data_source,
+            value_col=value_col,
+            roi=roi,
+            dx=dx,
+            dy=dy,
+            status_text="globalスケール計算中...",
+            on_status=on_status,
+            on_empty=on_empty,
+            on_error=on_error,
+            on_done=on_done,
+            on_token_mismatch=on_token_mismatch,
+        )
 
     def _run(self):
         value_col = self.value_var.get().strip()
@@ -2185,19 +1321,9 @@ class XYValueMapGUI(tk.Toplevel):
             return
 
         scale_mode = self.scale_mode.get()
+        manual_scale = None
         if scale_mode == "manual":
-            try:
-                vmin = float(self.vmin_var.get())
-                vmax = float(self.vmax_var.get())
-            except Exception:
-                messagebox.showerror("エラー", "manual の場合は vmin/vmax を数値で入力してください。")
-                return
-            if vmin >= vmax:
-                messagebox.showerror("エラー", "vmin は vmax より小さい必要があります。")
-                return
-            scale = (vmin, vmax)
-        else:
-            scale = None
+            manual_scale = (self.vmin_var.get(), self.vmax_var.get())
 
         try:
             min_color = parse_color(self.min_color_var.get())
@@ -2210,39 +1336,29 @@ class XYValueMapGUI(tk.Toplevel):
         out_base = Path(self.output_var.get())
         out_dir = out_base / f"xy_value_map_{value_col}"
 
-        progress = _ProgressWindow(self, title="出力中", maximum=self._data_source.step_count)
         try:
-            export_xy_value_maps(
+            out_dir = run_export_all(
                 data_source=self._data_source,
-                output_dir=out_dir,
                 value_col=value_col,
                 roi=roi,
-                min_color=min_color,
-                max_color=max_color,
-                scale_mode=scale_mode,
-                manual_scale=scale,
                 dx=dx,
                 dy=dy,
-                show_title=output_opts.show_title,
-                title_text=output_opts.title_text,
-                show_ticks=output_opts.show_ticks,
-                show_frame=output_opts.show_frame,
-                show_cbar=output_opts.show_cbar,
-                cbar_label=output_opts.cbar_label,
-                title_font_size=output_opts.title_font_size,
-                tick_font_size=output_opts.tick_font_size,
-                cbar_label_font_size=output_opts.cbar_label_font_size,
-                pad_inches=output_opts.pad_inches,
-                figsize=output_opts.figsize,
-                progress=progress,
+                min_color=min_color,
+                max_color=max_color,
+                output_opts=output_opts,
+                output_dir=out_dir,
+                scale_mode=scale_mode,
+                manual_scale=manual_scale,
+                progress_factory=lambda maximum, title: _ProgressWindow(self, title=title, maximum=maximum),
+                export_func=export_xy_value_maps,
             )
+        except ValueError as e:
+            messagebox.showerror("エラー", str(e))
+            return
         except Exception as e:
             logger.exception("画像出力に失敗しました")
-            progress.close()
-            messagebox.showerror("エラー", f"画像出力に失敗しました:\n{e}")
+            messagebox.showerror("エラー", str(e))
             return
-        finally:
-            progress.close()
 
         messagebox.showinfo("完了", f"画像を出力しました:\n{out_dir}")
 
@@ -2268,55 +1384,9 @@ class XYValueMapGUI(tk.Toplevel):
         self.step_var.set(step)
 
         scale_mode = self.scale_mode.get()
+        manual_scale = None
         if scale_mode == "manual":
-            try:
-                vmin = float(self.vmin_var.get())
-                vmax = float(self.vmax_var.get())
-            except Exception:
-                messagebox.showerror("エラー", "manual の場合は vmin/vmax を数値で入力してください。")
-                return
-            if vmin >= vmax:
-                messagebox.showerror("エラー", "vmin は vmax より小さい必要があります。")
-                return
-        else:
-            # global が計算済みならそれを使用。未計算の場合は暫定スケール（このステップのmin/max）で出力する。
-            if self._global_scale.vmin is not None and self._global_scale.vmax is not None:
-                vmin, vmax = self._global_scale.vmin, self._global_scale.vmax
-            else:
-                msg = (
-                    "global スケールがまだ計算されていないため、\n"
-                    "このステップの min/max（プレビューと同じ暫定スケール）で出力します。\n"
-                    "よろしいですか？"
-                )
-                if not messagebox.askyesno("確認", msg):
-                    return
-                try:
-                    frame = self._get_preview_frame(step, value_col)
-                    x, y, v = frame_to_grids(frame, value_col=value_col)
-                    prepared = prepare_rotated_grid(
-                        x,
-                        y,
-                        v,
-                        roi=roi,
-                        dx=dx,
-                        dy=dy,
-                        local_origin=True,
-                    )
-                    if prepared is None:
-                        messagebox.showerror("エラー", "ROI内に点がありません。")
-                        return
-                    _, _, vals, mask = prepared
-                    finite = vals[np.isfinite(vals) & mask]
-                    if finite.size == 0:
-                        messagebox.showerror("エラー", "ROI 内の Value が全て NaN/Inf です。")
-                        return
-                    vmin = float(finite.min())
-                    vmax = float(finite.max())
-                    if vmin == vmax:
-                        vmax = vmin + 1e-12
-                except Exception as e:
-                    messagebox.showerror("エラー", f"スケール計算に失敗しました:\n{e}")
-                    return
+            manual_scale = (self.vmin_var.get(), self.vmax_var.get())
 
         try:
             min_color = parse_color(self.min_color_var.get())
@@ -2329,40 +1399,36 @@ class XYValueMapGUI(tk.Toplevel):
         out_base = Path(self.output_var.get())
         out_dir = out_base / f"xy_value_map_{value_col}"
 
-        progress = _ProgressWindow(self, title="出力中", maximum=1)
-        progress.update(current=0, total=1, text=f"出力中: step={step}")
         try:
-            out_path = export_xy_value_map_step(
+            out_path = run_export_single_step(
                 data_source=self._data_source,
-                output_dir=out_dir,
-                step=step,
                 value_col=value_col,
+                step=step,
                 roi=roi,
-                min_color=min_color,
-                max_color=max_color,
-                vmin=vmin,
-                vmax=vmax,
                 dx=dx,
                 dy=dy,
-                show_title=output_opts.show_title,
-                title_text=output_opts.title_text,
-                show_ticks=output_opts.show_ticks,
-                show_frame=output_opts.show_frame,
-                show_cbar=output_opts.show_cbar,
-                cbar_label=output_opts.cbar_label,
-                title_font_size=output_opts.title_font_size,
-                tick_font_size=output_opts.tick_font_size,
-                cbar_label_font_size=output_opts.cbar_label_font_size,
-                pad_inches=output_opts.pad_inches,
-                figsize=output_opts.figsize,
+                min_color=min_color,
+                max_color=max_color,
+                output_opts=output_opts,
+                output_dir=out_dir,
+                scale_mode=scale_mode,
+                manual_scale=manual_scale,
+                global_scale=self._global_scale.get_scale(),
+                confirm_global_fallback=lambda msg: messagebox.askyesno("確認", msg),
+                get_preview_frame=self._get_preview_frame,
+                compute_roi_minmax_fn=compute_roi_minmax,
+                progress_factory=lambda maximum, title: _ProgressWindow(self, title=title, maximum=maximum),
+                export_func=export_xy_value_map_step,
             )
+        except ValueError as e:
+            messagebox.showerror("エラー", str(e))
+            return
         except Exception as e:
             logger.exception("このステップのみ出力に失敗しました")
-            progress.close()
-            messagebox.showerror("エラー", f"画像出力に失敗しました:\n{e}")
+            messagebox.showerror("エラー", str(e))
             return
-        finally:
-            progress.close()
+        if out_path is None:
+            return
 
         messagebox.showinfo("完了", f"画像を出力しました:\n{out_path}")
 

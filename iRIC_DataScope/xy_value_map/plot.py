@@ -4,30 +4,10 @@ import logging
 from typing import Literal
 
 import numpy as np
-from matplotlib import font_manager, rcParams
+
+from .style import ensure_japanese_font
 
 logger = logging.getLogger(__name__)
-_JP_FONT_SET = False
-
-
-def _ensure_japanese_font():
-    """Try to set a font that can render Japanese to avoid glyph warnings."""
-    global _JP_FONT_SET
-    if _JP_FONT_SET:
-        return
-    candidates = ["Yu Gothic", "Yu Gothic UI", "Meiryo", "MS Gothic", "Noto Sans CJK JP"]
-    for name in candidates:
-        try:
-            path = font_manager.findfont(name, fallback_to_default=False)
-            if path:
-                rcParams["font.family"] = name
-                rcParams["axes.unicode_minus"] = False
-                _JP_FONT_SET = True
-                return
-        except Exception:
-            continue
-    rcParams["axes.unicode_minus"] = False
-    _JP_FONT_SET = True
 
 
 def _apply_plot_options(
@@ -96,7 +76,7 @@ def render_xy_value_map(
     cbar_label_font_size: float | None = None,
 ):
     """プレビュー／出力共通の描画処理"""
-    _ensure_japanese_font()
+    ensure_japanese_font()
 
     width = max(float(roi.width), 1e-12)
     height = max(float(roi.height), 1e-12)
