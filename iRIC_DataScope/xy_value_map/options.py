@@ -1,0 +1,34 @@
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Tuple
+
+
+@dataclass
+class OutputOptions:
+    show_title: bool = True
+    title_text: str = ""
+    show_ticks: bool = True
+    show_frame: bool = True
+    show_cbar: bool = True
+    cbar_label: str = ""
+    pad_inches: float = 0.02
+    title_font_size: float | None = 12.0
+    tick_font_size: float | None = 10.0
+    cbar_label_font_size: float | None = 10.0
+    figsize: Tuple[float, float] = (6.0, 4.0)
+
+    def to_kwargs(self) -> dict[str, object]:
+        return {
+            "show_title": self.show_title,
+            "title_text": self.title_text,
+            "show_ticks": self.show_ticks,
+            "show_frame": self.show_frame,
+            "show_cbar": self.show_cbar,
+            "cbar_label": self.cbar_label,
+            "pad_inches": self.pad_inches,
+            "title_font_size": self.title_font_size,
+            "tick_font_size": self.tick_font_size,
+            "cbar_label_font_size": self.cbar_label_font_size,
+            "figsize": tuple(self.figsize),
+        }
