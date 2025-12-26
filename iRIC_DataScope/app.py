@@ -1,19 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 # iRIC_DataScope\app.py
-"""
-iRIC_DataScope\app.py 直接実行用スクリプト
-"""
+"""iRIC_DataScope ランチャー起動用スクリプト。"""
 import sys
 import logging
 from pathlib import Path
 import tkinter as tk
 import webbrowser
-
-# スクリプト単体実行時にパッケージを認識させる
-if __name__ == '__main__':
-    project_root = Path(__file__).resolve().parent.parent
-    sys.path.insert(0, str(project_root))
 
 # ログ設定を初期化
 from iRIC_DataScope.common.logging_config import setup_logging
@@ -23,10 +16,10 @@ logger = logging.getLogger(__name__)
 # GUI コンポーネントの読み込み
 from iRIC_DataScope.common.io_selector import IOFolderSelector
 from iRIC_DataScope.common.iric_project import classify_input_dir
-from iRIC_DataScope.lr_wse.gui import LrWseGUI
-from iRIC_DataScope.cross_section.gui import ProfilePlotGUI
-from iRIC_DataScope.time_series.gui_components import TimeSeriesGUI
-from iRIC_DataScope.xy_value_map.gui import XYValueMapGUI
+from iRIC_DataScope.lr_wse.launcher import launch_from_launcher as launch_lr_wse
+from iRIC_DataScope.cross_section.launcher import launch_from_launcher as launch_cross_section
+from iRIC_DataScope.time_series.launcher import launch_from_launcher as launch_time_series
+from iRIC_DataScope.xy_value_map.launcher import launch_from_launcher as launch_xy_value_map
 
 class LauncherApp(tk.Tk):
     """
@@ -160,7 +153,7 @@ class LauncherApp(tk.Tk):
             logger.debug("LauncherApp: LrWseGUI already open, lifting window")
             self._lr_wse_win.lift()
             return
-        self._lr_wse_win = LrWseGUI(self, in_path, out_dir)
+        self._lr_wse_win = launch_lr_wse(self, input_path=in_path, output_dir=out_dir)
         self._lr_wse_win.protocol("WM_DELETE_WINDOW", self._on_close_lr_wse)
         logger.debug("LauncherApp: LrWseGUI window created")
 
@@ -180,7 +173,7 @@ class LauncherApp(tk.Tk):
             logger.debug("LauncherApp: ProfilePlotGUI already open, lifting window")
             self._cross_section_win.lift()
             return
-        self._cross_section_win = ProfilePlotGUI(self, in_path, out_dir)
+        self._cross_section_win = launch_cross_section(self, input_path=in_path, output_dir=out_dir)
         self._cross_section_win.protocol("WM_DELETE_WINDOW", self._on_close_cross_section)
         logger.debug("LauncherApp: ProfilePlotGUI window created")
 
@@ -200,11 +193,7 @@ class LauncherApp(tk.Tk):
             logger.debug("LauncherApp: TimeSeriesGUI already open, lifting window")
             self._time_series_win.lift()
             return
-        self._time_series_win = TimeSeriesGUI(
-            master=self,
-            initial_input_dir=in_path,
-            initial_output_dir=out_dir,
-        )
+        self._time_series_win = launch_time_series(self, input_path=in_path, output_dir=out_dir)
         self._time_series_win.protocol("WM_DELETE_WINDOW", self._on_close_time_series)
         logger.debug("LauncherApp: TimeSeriesGUI window created")
 
@@ -224,7 +213,7 @@ class LauncherApp(tk.Tk):
             logger.debug("LauncherApp: XYValueMapGUI already open, lifting window")
             self._xy_map_win.lift()
             return
-        self._xy_map_win = XYValueMapGUI(self, input_path=in_path, output_dir=out_dir)
+        self._xy_map_win = launch_xy_value_map(self, input_path=in_path, output_dir=out_dir)
         self._xy_map_win.bind("<Destroy>", self._on_destroy_xy_map)
 
     def _on_destroy_xy_map(self, event):

@@ -1,21 +1,24 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.utils.hooks import collect_data_files
-from PyInstaller.utils.hooks import collect_submodules
+from pathlib import Path
 
-datas = [('iRIC_DataScope', 'iRIC_DataScope')]
-hiddenimports = ['logging.handlers', 'tkinter.ttk', 'tkinter.filedialog', 'tkinter.messagebox', 'matplotlib.backends.backend_tkagg']
-datas += collect_data_files('matplotlib')
-hiddenimports += collect_submodules('pandas')
-hiddenimports += collect_submodules('numpy')
-hiddenimports += collect_submodules('scipy')
-hiddenimports += collect_submodules('h5py')
-hiddenimports += collect_submodules('openpyxl')
-hiddenimports += collect_submodules('xlsxwriter')
+from PyInstaller.utils.hooks import collect_data_files
+
+ROOT = Path.cwd()
+APP_ENTRY = str(ROOT / "iRIC_DataScope" / "app.py")
+
+datas = collect_data_files('matplotlib')
+hiddenimports = [
+    'logging.handlers',
+    'tkinter.ttk',
+    'tkinter.filedialog',
+    'tkinter.messagebox',
+    'matplotlib.backends.backend_tkagg',
+]
 
 
 a = Analysis(
-    ['iRIC_DataScope\\app.py'],
-    pathex=[],
+    [APP_ENTRY],
+    pathex=[str(ROOT)],
     binaries=[],
     datas=datas,
     hiddenimports=hiddenimports,
@@ -34,7 +37,7 @@ exe = EXE(
     a.binaries,
     a.datas,
     [],
-    name='iRIC_DataScope-v1.1.0',
+    name='iRIC_DataScope-v1.1.1',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
