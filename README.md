@@ -39,7 +39,26 @@ python -m iRIC_DataScope.app
 利用者向けの exe は Releases にあります。  
 https://github.com/Pckk-solvers/iRIC_DataScope/releases
 
-## 各GUIの操作手順はこちら（詳細マニュアル）
+## ドキュメント
+
+### ユーザーマニュアル（GitHub Pages）
+最新のドキュメントは GitHub Pages でホストされています：  
+https://pckk-solvers.github.io/iRIC_DataScope/
+
+### ローカルでドキュメントをビルドする場合
+ローカルでドキュメントをビルドして参照する場合：
+
+```bash
+# ドキュメントビルド
+mkdocs build
+
+# ローカルサーバーで閲覧
+mkdocs serve
+```
+
+ビルド済みドキュメントは `build_docs/site/index.html` からアクセスできます。
+
+### Webマニュアル（Notion）
 入力選択〜出力までの画面操作を機能別にまとめています。  
 https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=73
 
