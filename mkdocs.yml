@@ -14,7 +14,6 @@ nav:
       - 横断重ね合わせ図作成: user_docs/cross_section.md
       - 時系列データ抽出: user_docs/time_series.md
       - X-Y 分布画像出力: user_docs/xy_value_map.md
-      - (ひな形): user_docs/_template.md
   - 開発向け（仕様）:
       - プロジェクト/ipro入力: specs/ipro_cgn_conversion.md
       - ランチャー: specs/launcher.md
