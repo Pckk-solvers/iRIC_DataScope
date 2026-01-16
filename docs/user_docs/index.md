@@ -17,6 +17,13 @@
 ## 画面イメージ
 ![ランチャー](../images/launcher.png)
 
+## 問い合わせ窓口
+
+| 名前 | 所属 | 連絡先 |
+| ---- | ---- | ---- |
+| 南 まさし | 国土基盤事業本部 河川部・国土基盤技術研究室 | masashi.minami@ss.pacific.co.jp |
+| 落合 優太 | 国土基盤事業本部 河川部・国土基盤技術研究室 | yuuta.ochiai@tk.pacific.co.jp |
+
 ## MkDocs で閲覧（任意）
 この `docs/` は MkDocs で閲覧できるようにしてあります（設定: `mkdocs.yml`）。
 

@@ -11,6 +11,7 @@ import sys
 import webbrowser
 import logging
 import threading
+import time
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -30,6 +31,7 @@ class ProfilePlotGUI(tk.Toplevel):
     def __init__(self, master, input_dir: Path, output_dir: Path):
         logger.info(f"GUI インスタンス作成: input_dir={input_dir}, output_dir={output_dir}")
         super().__init__(master)
+        start = time.perf_counter()
         self.master = master
         self.input_dir = input_dir
         self.output_dir = output_dir
@@ -51,7 +53,9 @@ class ProfilePlotGUI(tk.Toplevel):
         # ────────────────────────────────
 
         self._build_ui()
+        logger.debug("ProfilePlotGUI: UI built in %.3fs", time.perf_counter() - start)
         self._toggle_manual_entries()  # 初期状態を設定
+        logger.debug("ProfilePlotGUI: Initialization complete in %.3fs", time.perf_counter() - start)
 
     def _open_help(self):
         """ヘルプページをスレッドセーフに開く"""

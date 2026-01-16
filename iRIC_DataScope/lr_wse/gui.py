@@ -11,6 +11,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox
 import webbrowser
+import time
 
 # ロガー設定
 logger = logging.getLogger(__name__)
@@ -34,6 +35,7 @@ class LrWseGUI(tk.Toplevel):
     def __init__(self, master, input_dir: Path, output_dir: Path):
         logger.info(f"GUI インスタンス作成: input_dir={input_dir}, output_dir={output_dir}")
         super().__init__(master)
+        start = time.perf_counter()
         self.master = master
         self.input_dir = input_dir
         self.output_dir = output_dir
@@ -42,14 +44,19 @@ class LrWseGUI(tk.Toplevel):
 
         # 1. ウィンドウ設定
         self._configure_window()
+        logger.debug("LrWseGUI: Window configured in %.3fs", time.perf_counter() - start)
         # 2. メニューバー（ヘルプ）作成
         self._create_menu()
+        logger.debug("LrWseGUI: Menu created in %.3fs", time.perf_counter() - start)
         # 3. ウィジェット作成
         self._create_widgets()
+        logger.debug("LrWseGUI: Widgets created in %.3fs", time.perf_counter() - start)
         # 4. イベントバインド
         self._bind_events()
+        logger.debug("LrWseGUI: Events bound in %.3fs", time.perf_counter() - start)
         # 5. 自動レイアウト調整：ウィジェットに合わせて初期サイズ＆最小サイズを設定
         self._finalize_layout()
+        logger.debug("LrWseGUI: Layout finalized in %.3fs", time.perf_counter() - start)
 
     def _configure_window(self):
         """ウィンドウタイトルとサイズを設定"""

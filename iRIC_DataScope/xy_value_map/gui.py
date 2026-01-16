@@ -5,6 +5,7 @@ import math
 import threading
 import tkinter as tk
 import webbrowser
+import time
 from pathlib import Path
 from tkinter import colorchooser, messagebox, ttk
 
@@ -51,6 +52,7 @@ MANUAL_URL = "https://pckk-solvers.github.io/iRIC_DataScope/user_docs/xy_value_m
 class XYValueMapGUI(tk.Toplevel):
     def __init__(self, master, input_path: Path, output_dir: Path):
         super().__init__(master)
+        start = time.perf_counter()
         self.master = master
         self.input_path = input_path
         self.output_dir = output_dir
@@ -100,10 +102,13 @@ class XYValueMapGUI(tk.Toplevel):
         self.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_menu()
+        logger.debug("XYValueMapGUI: Menu built in %.3fs", time.perf_counter() - start)
         self._build_ui()
+        logger.debug("XYValueMapGUI: UI built in %.3fs", time.perf_counter() - start)
         self._set_controls_enabled(False)
         self.status_var.set("Loading...")
         self.after(0, self._start_initial_load)
+        logger.debug("XYValueMapGUI: Initialization complete in %.3fs", time.perf_counter() - start)
 
     def _build_menu(self):
         menubar = tk.Menu(self)
@@ -345,6 +350,8 @@ class XYValueMapGUI(tk.Toplevel):
                 return
 
             def on_done():
+                if not self.winfo_exists() or not getattr(self, "step_spin", None) or not self.step_spin.winfo_exists():
+                    return
                 self._data_source = ds
                 self._data_ready = True
                 self._value_columns = vars_

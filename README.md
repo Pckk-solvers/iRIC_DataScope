@@ -58,7 +58,7 @@ mkdocs serve
 
 ビルド済みドキュメントは `build_docs/site/index.html` からアクセスできます。
 
-### Webマニュアル（Notion）
+### Webマニュアル（Notion）こちらは旧バージョンとなります。
 入力選択〜出力までの画面操作を機能別にまとめています。  
 https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=73
 

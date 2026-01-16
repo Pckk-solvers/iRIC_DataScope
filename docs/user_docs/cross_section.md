@@ -2,7 +2,7 @@
 
 横断方向のプロファイルを作成し、複数ステップの結果を重ね合わせて可視化する GUI ツールです。
 
-![横断重ね合わせ図作成](../images/cross_section.png)
+![横断重ね合わせ図作成（説明付き）](../images/cross_section_ui_annotated.png)
 
 ---
 
@@ -78,6 +78,8 @@
 ---
 
 ## 出力詳細
+
+![出力例](../images/cross_section_output.png)
 
 ### Excel ファイル構成
 - 各プロファイルが別シートとして格納

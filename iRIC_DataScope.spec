@@ -2,11 +2,14 @@
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files
+from PyInstaller.building.splash import Splash
 
 ROOT = Path.cwd()
 APP_ENTRY = str(ROOT / "iRIC_DataScope" / "app.py")
+SPLASH_PATH = str(ROOT / "iRIC_DataScope" / "assets" / "splash.png")
 
 datas = collect_data_files('matplotlib')
+datas += [(SPLASH_PATH, "iRIC_DataScope/assets")]
 hiddenimports = [
     'logging.handlers',
     'tkinter.ttk',
@@ -31,6 +34,9 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
+# Splash設定 - PyInstaller 6.17.0仕様
+splash = Splash(SPLASH_PATH, binaries=a.binaries, datas=a.datas)
+
 exe = EXE(
     pyz,
     a.scripts,
@@ -41,7 +47,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
@@ -50,4 +56,5 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
+    splash=splash,
 )

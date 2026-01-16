@@ -7,19 +7,16 @@ import logging
 from pathlib import Path
 import tkinter as tk
 import webbrowser
+import time
 
-# ログ設定を初期化
-from iRIC_DataScope.common.logging_config import setup_logging
-setup_logging()
 logger = logging.getLogger(__name__)
 
-# GUI コンポーネントの読み込み
-from iRIC_DataScope.common.io_selector import IOFolderSelector
-from iRIC_DataScope.common.iric_project import classify_input_dir
-from iRIC_DataScope.lr_wse.launcher import launch_from_launcher as launch_lr_wse
-from iRIC_DataScope.cross_section.launcher import launch_from_launcher as launch_cross_section
-from iRIC_DataScope.time_series.launcher import launch_from_launcher as launch_time_series
-from iRIC_DataScope.xy_value_map.launcher import launch_from_launcher as launch_xy_value_map
+"""
+重い import は起動時のスプラッシュ表示後に遅延ロードする。
+"""
+
+SPLASH_REL_PATH = Path("iRIC_DataScope") / "assets" / "splash.png"
+_APP_DIR = Path(__file__).resolve().parent
 
 class LauncherApp(tk.Tk):
     """
@@ -30,25 +27,104 @@ class LauncherApp(tk.Tk):
     """
     def __init__(self):
         super().__init__()
+        self._splash = None
+        self._splash_image = None
+        self._show_splash()
+        # Force a paint before heavy initialization so splash is visible.
+        try:
+            self.update_idletasks()
+            self.update()
+        except Exception:
+            pass
+        # Configure logging after splash is visible (import can be heavy).
+        try:
+            from iRIC_DataScope.common.logging_config import setup_logging
+
+            setup_logging()
+        except Exception:
+            pass
+        start = time.perf_counter()
         logger.debug("LauncherApp: Starting initialization")
         # 1. ウィンドウ設定
         self._configure_window()
+        logger.debug("LauncherApp: Window configured in %.3fs", time.perf_counter() - start)
         # 2. メニューバー（ヘルプ）作成
         self._create_menu()
+        logger.debug("LauncherApp: Menu created in %.3fs", time.perf_counter() - start)
         # 3. IO フォルダ選択パネル作成
         self._create_io_panel()
+        logger.debug("LauncherApp: IO panel created in %.3fs", time.perf_counter() - start)
         # 4. 各機能起動ボタン作成
         self._create_launch_buttons()
+        logger.debug("LauncherApp: Launch buttons created in %.3fs", time.perf_counter() - start)
         # 5. イベントバインド（パス検証・ショートカットキー）
         self._bind_events()
+        logger.debug("LauncherApp: Events bound in %.3fs", time.perf_counter() - start)
         # 6. 自動レイアウト調整：ウィジェットに合わせて初期サイズ＆最小サイズを設定
         self._finalize_layout()
+        logger.debug("LauncherApp: Layout finalized in %.3fs", time.perf_counter() - start)
         # 既存ウィンドウを保持する変数
         self._lr_wse_win = None
         self._cross_section_win = None
         self._time_series_win = None
         self._xy_map_win = None
-        logger.debug("LauncherApp: Initialization complete")
+        logger.debug("LauncherApp: Initialization complete in %.3fs", time.perf_counter() - start)
+        # Hide splash after the event loop starts so it can be displayed.
+        self.after(0, self._finish_startup)
+
+    def _finish_startup(self) -> None:
+        self._hide_splash()
+        self.deiconify()
+        self._center_window(self.winfo_width(), self.winfo_height())
+
+    def _resource_path(self, relative_path: Path) -> Path:
+        if getattr(sys, "frozen", False):
+            base = Path(getattr(sys, "_MEIPASS", Path.cwd()))
+            return base / relative_path
+        return _APP_DIR / "assets" / relative_path.name
+
+    def _show_splash(self) -> None:
+        splash_path = self._resource_path(SPLASH_REL_PATH)
+        if not splash_path.is_file():
+            logger.debug("LauncherApp: Splash image not found: %s", splash_path)
+            return
+        self.withdraw()
+        splash = tk.Toplevel(self)
+        splash.overrideredirect(True)
+        splash.attributes("-topmost", True)
+        try:
+            image = tk.PhotoImage(file=str(splash_path))
+        except Exception as exc:
+            logger.warning("LauncherApp: Failed to load splash image: %s", exc)
+            self.deiconify()
+            return
+        target_w, target_h = 600, 330
+        iw, ih = image.width(), image.height()
+        if iw > 0 and ih > 0:
+            scale = min(target_w / iw, target_h / ih)
+            if scale < 1.0:
+                factor = int((1.0 / scale) + 0.999)
+                image = image.subsample(factor, factor)
+            elif scale > 1.0:
+                factor = int(scale)
+                if factor > 1:
+                    image = image.zoom(factor, factor)
+        label = tk.Label(splash, image=image, borderwidth=0)
+        label.pack()
+        splash.update_idletasks()
+        width = image.width()
+        height = image.height()
+        x = (splash.winfo_screenwidth() - width) // 2
+        y = (splash.winfo_screenheight() - height) // 2
+        splash.geometry(f"{width}x{height}+{x}+{y}")
+        self._splash = splash
+        self._splash_image = image
+
+    def _hide_splash(self) -> None:
+        if self._splash and self._splash.winfo_exists():
+            self._splash.destroy()
+        self._splash = None
+        self._splash_image = None
 
     def _configure_window(self):
         """ウィンドウのタイトルと初期サイズを設定"""
@@ -72,7 +148,17 @@ class LauncherApp(tk.Tk):
         margin_x, margin_y = 20, 20
         self.geometry(f"{w+margin_x}x{h+margin_y}")
         self.minsize(w+margin_x, h+margin_y)
+        self._center_window(w + margin_x, h + margin_y)
         logger.debug(f"LauncherApp: Geometry set to {w+margin_x}x{h+margin_y}")
+
+    def _center_window(self, width: int, height: int) -> None:
+        if width <= 0 or height <= 0:
+            return
+        screen_w = self.winfo_screenwidth()
+        screen_h = self.winfo_screenheight()
+        x = (screen_w - width) // 2
+        y = (screen_h - height) // 2
+        self.geometry(f"{width}x{height}+{x}+{y}")
 
     def _create_menu(self):
         """メニューバーとヘルプメニューを追加"""
@@ -91,6 +177,7 @@ class LauncherApp(tk.Tk):
     def _create_io_panel(self):
         """入力／出力フォルダ選択用パネルを配置"""
         logger.debug("LauncherApp: Creating IO folder selector panel")
+        from iRIC_DataScope.common.io_selector import IOFolderSelector
         self.io_panel = IOFolderSelector(self)
         self.io_panel.pack(fill="x", padx=10, pady=10)
         logger.debug("LauncherApp: IO panel created")
@@ -133,6 +220,7 @@ class LauncherApp(tk.Tk):
         in_ok = False
         if in_path and in_path.is_dir():
             try:
+                from iRIC_DataScope.common.iric_project import classify_input_dir
                 classify_input_dir(in_path)
                 in_ok = True
             except Exception:
@@ -148,6 +236,7 @@ class LauncherApp(tk.Tk):
 
     def open_lr_wse(self):
         """左右岸水位抽出ツールを開く"""
+        from iRIC_DataScope.lr_wse.launcher import launch_from_launcher as launch_lr_wse
         out_dir = self.io_panel.get_output_dir()
         in_path = self.io_panel.get_input_dir()
         logger.info(f"LauncherApp: Opening LrWseGUI (in_path={in_path}, out_dir={out_dir})")
@@ -168,6 +257,7 @@ class LauncherApp(tk.Tk):
 
     def open_cross_section(self):
         """横断重ね合わせ図作成ツールを開く"""
+        from iRIC_DataScope.cross_section.launcher import launch_from_launcher as launch_cross_section
         out_dir = self.io_panel.get_output_dir()
         in_path = self.io_panel.get_input_dir()
         logger.info(f"LauncherApp: Opening ProfilePlotGUI (in_path={in_path}, out_dir={out_dir})")
@@ -188,6 +278,7 @@ class LauncherApp(tk.Tk):
 
     def open_time_series(self):
         """時系列抽出ツール GUI を起動"""
+        from iRIC_DataScope.time_series.launcher import launch_from_launcher as launch_time_series
         out_dir = self.io_panel.get_output_dir()
         in_path = self.io_panel.get_input_dir()
         logger.info(f"LauncherApp: Opening TimeSeriesGUI (in_path={in_path}, out_dir={out_dir})")
@@ -208,6 +299,7 @@ class LauncherApp(tk.Tk):
 
     def open_xy_value_map(self):
         """X-Y分布画像出力ツールを開く（プロジェクト/CSVフォルダ/.ipro を直接読み込む）"""
+        from iRIC_DataScope.xy_value_map.launcher import launch_from_launcher as launch_xy_value_map
         in_path = self.io_panel.get_input_dir()
         out_dir = self.io_panel.get_output_dir()
         logger.info(f"LauncherApp: Opening XYValueMapGUI (input={in_path}, out_dir={out_dir})")

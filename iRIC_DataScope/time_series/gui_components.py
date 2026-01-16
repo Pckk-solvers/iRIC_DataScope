@@ -16,6 +16,7 @@ import webbrowser
 from tkinter import messagebox, ttk, filedialog
 from pathlib import Path
 import pandas as pd
+import time
 
 from iRIC_DataScope.common.path_selector import PathSelector
 from iRIC_DataScope.common.ui_config import FONT_MAIN, PAD_X, PAD_Y
@@ -252,20 +253,26 @@ class TimeSeriesGUI(tk.Toplevel):
     """
     def __init__(self, master=None, initial_input_dir=None, initial_output_dir=None):
         super().__init__(master)
+        start = time.perf_counter()
         self.input_dir = initial_input_dir
         self.output_dir = initial_output_dir
         self.file_name_var = tk.StringVar(value="time_series.xlsx")
 
         # ウィンドウ初期設定
         self._configure_window()
+        logger.debug("TimeSeriesGUI: Window configured in %.3fs", time.perf_counter() - start)
         # ヘルプメニュー作成
         self._create_menu()
+        logger.debug("TimeSeriesGUI: Menu created in %.3fs", time.perf_counter() - start)
         # ウィジェット生成・配置
         self._create_widgets()
+        logger.debug("TimeSeriesGUI: Widgets created in %.3fs", time.perf_counter() - start)
         # ショートカットバインド
         self._bind_events()
+        logger.debug("TimeSeriesGUI: Events bound in %.3fs", time.perf_counter() - start)
         # 最小サイズ設定
         self._finalize_layout()
+        logger.debug("TimeSeriesGUI: Layout finalized in %.3fs", time.perf_counter() - start)
 
     def _configure_window(self):
         """タイトルとリサイズ可否設定"""
