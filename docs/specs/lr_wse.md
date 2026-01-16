@@ -14,6 +14,7 @@
 - `iRIC_DataScope/lr_wse/extractor.py`
   - CSVフォルダ入力: `extract_all()` で中間 CSV を生成
   - プロジェクトフォルダ / `.ipro`: CGNS を直接読み込んで中間 CSV を生成
+  - **時刻 `t=0` のデータは抽出対象から除外**
 - `iRIC_DataScope/lr_wse/writer.py`
   - `combine_to_excel()` で中間 CSV を統合して Excel を出力
 

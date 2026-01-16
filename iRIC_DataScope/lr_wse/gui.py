@@ -133,8 +133,14 @@ class LrWseGUI(tk.Toplevel):
         tk.Entry(self, textvariable=self.missing_var, width=40).grid(row=6, column=1, **pad)
         tk.Label(self, text="(空白→空セル)").grid(row=6, column=2, sticky="w", **pad)
 
+        # 最小水深
+        tk.Label(self, text="最小水深:").grid(row=7, column=0, sticky="e", **pad)
+        self.min_depth_var = tk.StringVar(value="")
+        tk.Entry(self, textvariable=self.min_depth_var, width=40).grid(row=7, column=1, **pad)
+        tk.Label(self, text="(空白→無効判定なし)").grid(row=7, column=2, sticky="w", **pad)
+
         # 実行ボタン
-        tk.Button(self, text="実行", command=self._run).grid(row=7, column=0, columnspan=3, pady=15)
+        tk.Button(self, text="実行", command=self._run).grid(row=8, column=0, columnspan=3, pady=15)
 
     def _bind_events(self):
         """各種イベントのバインド: Alt+H など"""
@@ -194,11 +200,18 @@ class LrWseGUI(tk.Toplevel):
                 return
             
             missing = None if self.missing_var.get() == "" else self.missing_var.get()
+            min_depth = None
+            if self.min_depth_var.get() != "":
+                try:
+                    min_depth = float(self.min_depth_var.get())
+                except ValueError:
+                    messagebox.showerror("エラー", "最小水深は数値で入力してください。")
+                    return
             temp_dir = None
             if self.use_temp.get():
                 temp_dir = self._resolve_temp_dir(out_dir, self.filename_var.get())
                 self.temp_var.set(str(temp_dir))
-            logger.debug(f"実行パラメータ: missing_elev={missing}, temp_dir={temp_dir}")
+            logger.debug(f"実行パラメータ: missing_elev={missing}, min_depth={min_depth}, temp_dir={temp_dir}")
             
             out_path = run_lr_wse(
                 input_path=in_dir,
@@ -206,13 +219,13 @@ class LrWseGUI(tk.Toplevel):
                 output_dir=out_dir,
                 excel_filename=self.filename_var.get(),
                 missing_elev=missing,
+                min_depth=min_depth,
                 temp_dir=temp_dir,
                 on_swap_warning=self._warn_setting_mismatch,
             )
             logger.info(f"処理完了: 出力ファイル={out_path}")
-            # 完了ダイアログを表示し、OK が押されたら Toplevel を閉じる
-            if messagebox.showinfo("完了", f"Excelを出力しました:\n{out_path}") == "ok":
-                self.destroy()
+            # 完了ダイアログを表示する（ウィンドウは閉じない）
+            messagebox.showinfo("完了", f"Excelを出力しました:\n{out_path}")
         except Exception as e:
             messagebox.showerror("エラー", str(e))
 

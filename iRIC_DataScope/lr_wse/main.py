@@ -32,6 +32,7 @@ def run_lr_wse(
     output_dir: Path,
     excel_filename: str = "summary.xlsx",
     missing_elev: Optional[Union[str, float]] = None,
+    min_depth: Optional[float] = None,
     temp_dir: Optional[Path] = None,
     on_swap_warning: Callable[[str], None] | None = None,
 ) -> Path:
@@ -49,7 +50,8 @@ def run_lr_wse(
     """
     logger.info("処理開始")
     logger.debug(f"パラメータ: input_path={input_path}, config_file={config_file}, output_dir={output_dir}, "
-                 f"excel_filename={excel_filename}, missing_elev={missing_elev}, temp_dir={temp_dir}")
+                 f"excel_filename={excel_filename}, missing_elev={missing_elev}, "
+                 f"min_depth={min_depth}, temp_dir={temp_dir}")
     
     # 設定読み込み
     logger.info("設定ファイル読み込み開始")
@@ -66,6 +68,7 @@ def run_lr_wse(
             setting_df=setting_df,
             temp_dir=td,
             on_swap_warning=on_swap_warning,
+            min_depth=min_depth,
         )
         logger.info("中間CSV出力完了")
     else:
@@ -73,18 +76,20 @@ def run_lr_wse(
         with TemporaryDirectory() as td_path:
             td = Path(td_path)
             _extract_input_to_temp(
-                input_path=input_path,
-                setting_df=setting_df,
-                temp_dir=td,
-                on_swap_warning=on_swap_warning,
-            )
+            input_path=input_path,
+            setting_df=setting_df,
+            temp_dir=td,
+            on_swap_warning=on_swap_warning,
+            min_depth=min_depth,
+        )
             logger.info("中間CSV出力完了")
             logger.info("Excel結合開始")
             result = combine_to_excel(
                 temp_dir=td,
                 output_dir=output_dir,
                 excel_filename=excel_filename,
-                missing_elev=missing_elev
+                missing_elev=missing_elev,
+                min_depth=min_depth,
             )
             logger.info("処理完了")
             return result
@@ -93,7 +98,8 @@ def run_lr_wse(
         temp_dir=td,
         output_dir=output_dir,
         excel_filename=excel_filename,
-        missing_elev=missing_elev
+        missing_elev=missing_elev,
+        min_depth=min_depth,
     )
     logger.info("処理完了")
     return result
@@ -105,6 +111,7 @@ def _extract_input_to_temp(
     setting_df: pd.DataFrame,
     temp_dir: Path,
     on_swap_warning: Callable[[str], None] | None = None,
+    min_depth: Optional[float] = None,
 ) -> None:
     def _default_warn(message: str) -> None:
         logger.warning(message)
@@ -116,14 +123,16 @@ def _extract_input_to_temp(
             raise ValueError("入力にはプロジェクトフォルダ、CSVフォルダ、または .ipro を指定してください。")
         data_source = DataSource.from_input(input_path)
         try:
-            frames = data_source.iter_frames_with_columns(
-                value_cols=["watersurfaceelevation(m)", "elevation(m)"]
-            )
+            value_cols = ["watersurfaceelevation(m)", "elevation(m)"]
+            if min_depth is not None:
+                value_cols.append("depth(m)")
+            frames = data_source.iter_frames_with_columns(value_cols=value_cols)
             extract_all_from_frames(
                 frames,
                 setting_df=setting_df,
                 temp_dir=temp_dir,
                 on_swap_warning=warn,
+                min_depth=min_depth,
             )
         finally:
             data_source.close()
@@ -136,19 +145,22 @@ def _extract_input_to_temp(
             setting_df=setting_df,
             temp_dir=temp_dir,
             on_swap_warning=warn,
+            min_depth=min_depth,
         )
         return
 
     data_source = DataSource.from_input(input_path)
     try:
-        frames = data_source.iter_frames_with_columns(
-            value_cols=["watersurfaceelevation(m)", "elevation(m)"]
-        )
+        value_cols = ["watersurfaceelevation(m)", "elevation(m)"]
+        if min_depth is not None:
+            value_cols.append("depth(m)")
+        frames = data_source.iter_frames_with_columns(value_cols=value_cols)
         extract_all_from_frames(
             frames,
             setting_df=setting_df,
             temp_dir=temp_dir,
             on_swap_warning=warn,
+            min_depth=min_depth,
         )
     finally:
         data_source.close()

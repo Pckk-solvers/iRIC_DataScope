@@ -53,7 +53,8 @@ def extract_bank_data(
       {prefix}_I, {prefix}_J,
       {prefix}_watersurfaceelevation,
       {prefix}_elevation,
-      {prefix}_X, {prefix}_Y
+      {prefix}_X, {prefix}_Y,
+      {prefix}_depth(m)
     """
     records = []
     i_series = pd.to_numeric(df["I"], errors="coerce")
@@ -75,6 +76,7 @@ def extract_bank_data(
         elev = np.nan
         X = np.nan
         Y = np.nan
+        depth = np.nan
 
         if coord_i_val is not None and coord_j_val is not None:
             match = df[(i_series == coord_i_val) & (j_series == coord_j_val)]
@@ -84,6 +86,7 @@ def extract_bank_data(
                 elev = row.get('elevation(m)', np.nan)
                 X = row.get('X', np.nan)
                 Y = row.get('Y', np.nan)
+                depth = row.get('depth(m)', np.nan)
 
         records.append({
             'KP': KP,
@@ -94,6 +97,7 @@ def extract_bank_data(
             f'{prefix}_elevation(m)': elev,
             f'{prefix}_X': X,
             f'{prefix}_Y': Y,
+            f'{prefix}_depth(m)': depth,
         })
     return pd.DataFrame(records)
 
@@ -104,6 +108,7 @@ def extract_all(
     temp_dir: Path,
     *,
     on_swap_warning: Callable[[str], None] | None = None,
+    min_depth: float | None = None,
 ) -> None:
     """
     iRIC 出力フォルダを再帰的に探索し、各 CSV を読み込んで左右岸抽出を行い、
@@ -117,6 +122,10 @@ def extract_all(
     checked = False
     for csv_path in csv_paths:
         t, df = read_iric_csv(csv_path)
+        if t == 0.0:
+            continue
+        if min_depth is not None and "depth(m)" not in df.columns:
+            raise ValueError("入力データに depth(m) 列が存在しません。")
         if not checked:
             checked = True
             if _detect_swap_ij(df, setting_df) and on_swap_warning:
@@ -135,6 +144,7 @@ def extract_all_from_frames(
     temp_dir: Path,
     *,
     on_swap_warning: Callable[[str], None] | None = None,
+    min_depth: float | None = None,
 ) -> None:
     """
     IricStepFrame の iterable から左右岸抽出を行い、1ステップ分を1ファイルとして書き出す。
@@ -145,7 +155,11 @@ def extract_all_from_frames(
     checked = False
     for frame in frames:
         t = getattr(frame, "time", 0.0) or 0.0
+        if t == 0.0:
+            continue
         df = frame.df
+        if min_depth is not None and "depth(m)" not in df.columns:
+            raise ValueError("入力データに depth(m) 列が存在しません。")
         if not checked:
             checked = True
             if _detect_swap_ij(df, setting_df) and on_swap_warning:

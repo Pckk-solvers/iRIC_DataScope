@@ -19,7 +19,8 @@ def combine_to_excel(
     temp_dir: Union[Path, str],
     output_dir: Union[Path, str],
     excel_filename: str,
-    missing_elev: Optional[Union[str, float]] = None
+    missing_elev: Optional[Union[str, float]] = None,
+    min_depth: Optional[float] = None,
 ) -> Path:
     """
     iRIC 左右岸最大水位整理ツール
@@ -51,10 +52,28 @@ def combine_to_excel(
         # KP をキーにマージ
         summary = left_max.join(right_max, how="outer").reset_index()
 
+        # 列順を整理
+        desired_cols = [
+            "KP",
+            "L_t", "L_I", "L_J", "L_X", "L_Y",
+            "L_watersurfaceelevation(m)", "L_elevation(m)", "L_depth(m)",
+            "R_t", "R_I", "R_J", "R_X", "R_Y",
+            "R_watersurfaceelevation(m)", "R_elevation(m)", "R_depth(m)",
+        ]
+        cols = [c for c in desired_cols if c in summary.columns] + [
+            c for c in summary.columns if c not in desired_cols
+        ]
+        summary = summary.loc[:, cols]
+
         # KP の数値部分でソート
-        summary["KP_numeric"] = summary["KP"].str.rstrip("kK").astype(float)
-        summary.sort_values(by="KP_numeric", inplace=True)
-        summary.drop(columns="KP_numeric", inplace=True)
+        if pd.api.types.is_numeric_dtype(summary["KP"]):
+            # KPが数値の場合はそのままソート
+            summary.sort_values(by="KP", inplace=True)
+        else:
+            # KPが文字列の場合はkを取り除いてからソート
+            summary["KP_numeric"] = summary["KP"].str.rstrip("kK").astype(float)
+            summary.sort_values(by="KP_numeric", inplace=True)
+            summary.drop(columns="KP_numeric", inplace=True)
 
         # 欠損値置換
         if missing_elev is not None:
@@ -62,8 +81,35 @@ def combine_to_excel(
                 summary = summary.fillna("")       # 空白セル
             else:
                 summary = summary.fillna(missing_elev)
+
+        # 最小水深一致時の無効化（左右岸別）
+        if min_depth is not None:
+            if "L_depth(m)" in df.columns:
+                left_invalid = df[df["L_depth(m)"] <= min_depth]["KP"].dropna().unique()
+                if "L_watersurfaceelevation(m)" in summary.columns:
+                    col = "L_watersurfaceelevation(m)"
+                    summary[col] = summary[col].astype("object")
+                    summary.loc[summary["KP"].isin(left_invalid), col] = "取得不可"
+                if "L_elevation(m)" in summary.columns:
+                    col = "L_elevation(m)"
+                    summary[col] = summary[col].astype("object")
+                    summary.loc[summary["KP"].isin(left_invalid), col] = "取得不可"
+            if "R_depth(m)" in df.columns:
+                right_invalid = df[df["R_depth(m)"] <= min_depth]["KP"].dropna().unique()
+                if "R_watersurfaceelevation(m)" in summary.columns:
+                    col = "R_watersurfaceelevation(m)"
+                    summary[col] = summary[col].astype("object")
+                    summary.loc[summary["KP"].isin(right_invalid), col] = "取得不可"
+                if "R_elevation(m)" in summary.columns:
+                    col = "R_elevation(m)"
+                    summary[col] = summary[col].astype("object")
+                    summary.loc[summary["KP"].isin(right_invalid), col] = "取得不可"
     else:
         summary = pd.DataFrame()
+
+    # Excel出力前にKP列に"k"を付加（元の形式に復元）
+    if not summary.empty and 'KP' in summary.columns and pd.api.types.is_numeric_dtype(summary['KP']):
+        summary['KP'] = summary['KP'].astype(str) + 'k'
 
     # Excel に書き出し
     with pd.ExcelWriter(excel_path, engine="openpyxl") as writer:
