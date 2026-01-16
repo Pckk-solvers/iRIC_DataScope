@@ -79,9 +79,11 @@ class LauncherApp(tk.Tk):
         logger.debug("LauncherApp: Creating menu bar")
         menubar = tk.Menu(self)
         help_menu = tk.Menu(menubar, tearoff=0)
-        help_menu.add_command(label="マニュアルを開く",
+        help_menu.add_command(label="マニュアルを開く (Notion)",
                               accelerator="Alt+H",
                               command=self.open_manual)
+        help_menu.add_command(label="ユーザーマニュアルを開く (GitHub Pages)",
+                              command=self.open_docs)
         menubar.add_cascade(label="ヘルプ(H)", menu=help_menu)
         self.config(menu=menubar)
         logger.debug("LauncherApp: Menu bar created")
@@ -225,6 +227,12 @@ class LauncherApp(tk.Tk):
         """Notion のマニュアルを既定ブラウザで開く"""
         url = "https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=73"
         logger.info(f"LauncherApp: Opening manual URL: {url}")
+        webbrowser.open(url)
+
+    def open_docs(self):
+        """GitHub Pages のユーザーマニュアルを既定ブラウザで開く"""
+        url = "https://pckk-solvers.github.io/iRIC_DataScope/"
+        logger.info(f"LauncherApp: Opening docs URL: {url}")
         webbrowser.open(url)
 
 def main(argv: list[str] | None = None):

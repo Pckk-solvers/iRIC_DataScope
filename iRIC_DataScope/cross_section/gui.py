@@ -10,6 +10,7 @@
 import sys
 import webbrowser
 import logging
+import threading
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
@@ -39,19 +40,25 @@ class ProfilePlotGUI(tk.Toplevel):
         # ─── メニューバー（ヘルプ）作成 ───
         menubar = tk.Menu(self)
         help_menu = tk.Menu(menubar, tearoff=0)
-        url = "https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=25#1f4ed1e8e79f80b8bd96d4e2c288d0d5"
         help_menu.add_command(
             label="マニュアルを開く",
             accelerator="Alt+H",
-            command=lambda: webbrowser.open(url)
+            command=self._open_help
         )
         menubar.add_cascade(label="ヘルプ(H)", menu=help_menu)
         self.config(menu=menubar)
-        self.bind_all("<Alt-h>", lambda e: webbrowser.open(url))
+        self.bind_all("<Alt-h>", lambda e: self._open_help())
         # ────────────────────────────────
 
         self._build_ui()
         self._toggle_manual_entries()  # 初期状態を設定
+
+    def _open_help(self):
+        """ヘルプページをスレッドセーフに開く"""
+        def open_url():
+            webbrowser.open("https://pckk-solvers.github.io/iRIC_DataScope/user_docs/cross_section/")
+        
+        threading.Thread(target=open_url, daemon=True).start()
 
     def _build_ui(self):
         logger.info("GUI ビルド開始")

@@ -232,7 +232,7 @@ class LrWseGUI(tk.Toplevel):
     def open_manual(self):
         """Notion マニュアルを既定ブラウザで開く"""
         logger.info("マニュアルを開く")
-        webbrowser.open("https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=25#1f4ed1e8e79f80fba2c3c518b62fc898")
+        webbrowser.open("https://pckk-solvers.github.io/iRIC_DataScope/user_docs/lr_wse/")
 
     def _warn_setting_mismatch(self, message: str) -> None:
         if self._swap_warned:

@@ -280,7 +280,7 @@ class TimeSeriesGUI(tk.Toplevel):
             label="マニュアルを開く",
             accelerator="Alt+H",
             command=lambda: webbrowser.open(
-                "https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=25#1f4ed1e8e79f8074a3d6eda343d6a550"
+                "https://pckk-solvers.github.io/iRIC_DataScope/user_docs/time_series/"
             )
         )
         menubar.add_cascade(label="ヘルプ(H)", menu=help_menu)
@@ -321,7 +321,7 @@ class TimeSeriesGUI(tk.Toplevel):
     def _bind_events(self):
         """Alt+H でマニュアルを開くショートカットを設定"""
         self.bind_all("<Alt-h>", lambda e: webbrowser.open(
-            "https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=25#1f4ed1e8e79f8074a3d6eda343d6a550"
+            "https://pckk-solvers.github.io/iRIC_DataScope/user_docs/time_series/"
         ))
 
     def _on_run(self):
