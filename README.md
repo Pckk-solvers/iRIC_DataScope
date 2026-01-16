@@ -1,7 +1,7 @@
 # iRIC_DataScope
 iRIC の計算結果を解析・抽出・可視化する GUI ツールです。
 
-![起動画面](docs/images/launcher-v1.1.1.png)
+![起動画面](docs/images/launcher.png)
 
 - 時系列データ抽出
 - 横断断面の重ね合わせ
