@@ -1,20 +1,20 @@
 # ユーザ向けドキュメント
 
-このディレクトリは、GUI の使い方を実装に合わせて整理したものです。  
+本ドキュメントは、各 GUI の使い方を実装に合わせて整理したものです。  
 アプリ内の「ヘルプ」メニューから各ページへ直接アクセスできます。
 
-## 公式ドキュメント
-- GitHub Pages: https://pckk-solvers.github.io/iRIC_DataScope/
-- Notion（ランチャーのヘルプから開く）: https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=73
-
-## 対象機能
+## ガイド
 - [ランチャー](launcher.md)
 - [左右岸水位抽出](lr_wse.md)
 - [横断重ね合わせ図作成](cross_section.md)
 - [時系列データ抽出](time_series.md)
 - [X-Y 分布画像出力](xy_value_map.md)
 
-## スクリーンショット
+## 公式ドキュメント
+- GitHub Pages: [iRIC_DataScope Docs](https://pckk-solvers.github.io/iRIC_DataScope/)
+- Notion（ランチャーのヘルプから開く）: [iRIC tools Manual](https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=73)
+
+## 画面イメージ
 ![ランチャー](../images/launcher.png)
 
 ## MkDocs で閲覧（任意）
