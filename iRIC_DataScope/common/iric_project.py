@@ -111,3 +111,15 @@ def classify_input_dir(input_dir: Path, case_name: str = "Case1.cgn") -> Literal
     if project_error is not None:
         raise project_error
     raise FileNotFoundError(f"Result_*.csv または CGNS が見つかりません: {input_dir}")
+
+
+def is_valid_input_path(input_path: Path | None, case_name: str = "Case1.cgn") -> bool:
+    if not input_path:
+        return False
+    if input_path.is_dir():
+        try:
+            classify_input_dir(input_path, case_name=case_name)
+            return True
+        except Exception:
+            return False
+    return input_path.is_file() and input_path.suffix.lower() == ".ipro"

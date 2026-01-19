@@ -5,7 +5,7 @@ from PyInstaller.utils.hooks import collect_data_files
 from PyInstaller.building.splash import Splash
 
 ROOT = Path.cwd()
-APP_ENTRY = str(ROOT / "iRIC_DataScope" / "app.py")
+APP_ENTRY = str(ROOT / "main.py")
 SPLASH_PATH = str(ROOT / "iRIC_DataScope" / "assets" / "splash.png")
 
 datas = collect_data_files('matplotlib')
