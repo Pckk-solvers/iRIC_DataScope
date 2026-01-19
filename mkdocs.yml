@@ -29,6 +29,7 @@ nav:
   - ビルド/配布:
       - PyInstaller: build_docs/pyinstaller.md
   - リリースノート:
+      - v1.1.3: release_notes/v1.1.3.md
       - v1.1.2: release_notes/v1.1.2.md
       - v1.1.1: release_notes/v1.1.1.md
       - v1.1.0: release_notes/v1.1.0.md
