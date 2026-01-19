@@ -15,17 +15,21 @@
 - Notion（ランチャーのヘルプから開く）: [iRIC tools Manual](https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=73)
 
 ## 画面イメージ
+### 起動画面
 ![ランチャー](../images/launcher.png)
+
+### メニュー展開
+![メニュー展開](../images/help_img.png)
 
 ## 問い合わせ窓口
 
 | 名前 | 所属 | 連絡先 |
 | ---- | ---- | ---- |
-| 南 まさし | 国土基盤事業本部 河川部・国土基盤技術研究室 | masashi.minami@ss.pacific.co.jp |
-| 落合 優太 | 国土基盤事業本部 河川部・国土基盤技術研究室 | yuuta.ochiai@tk.pacific.co.jp |
+| 南 まさし | 国土基盤事業本部 流域計画部・技術研究室 | masashi.minami@ss.pacific.co.jp |
+| 落合 優太 | 国土基盤事業本部 流域計画部・技術研究室 | yuuta.ochiai@tk.pacific.co.jp |
 
 ## MkDocs で閲覧（任意）
 この `docs/` は MkDocs で閲覧できるようにしてあります（設定: `mkdocs.yml`）。
 
-- 例（MkDocs をインストール済みの場合）: `mkdocs serve`
+- 例（uv を利用する場合）: `uv run mkdocs serve`
 - 出力先: `build_docs/site`（自動生成物のため Git 管理対象外）

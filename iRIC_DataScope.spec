@@ -9,7 +9,6 @@ APP_ENTRY = str(ROOT / "iRIC_DataScope" / "app.py")
 SPLASH_PATH = str(ROOT / "iRIC_DataScope" / "assets" / "splash.png")
 
 datas = collect_data_files('matplotlib')
-datas += [(SPLASH_PATH, "iRIC_DataScope/assets")]
 hiddenimports = [
     'logging.handlers',
     'tkinter.ttk',
@@ -34,13 +33,23 @@ a = Analysis(
 )
 pyz = PYZ(a.pure)
 
-# Splash設定 - PyInstaller 6.17.0仕様
-splash = Splash(SPLASH_PATH, binaries=a.binaries, datas=a.datas)
+# Splash設定
+splash = Splash(
+    SPLASH_PATH,
+    binaries=a.binaries,
+    datas=a.datas,
+    # text_pos=(10, 50),  # onefile解凍中のテキスト出したいなら
+)
 
 exe = EXE(
     pyz,
     a.scripts,
+
+    splash,          # ← これを “引数として混ぜる”
+    splash.binaries, # ← onefileならEXE側に入れる（重要）
+
     a.binaries,
+    a.zipfiles,      # ← ここ、[]じゃなく a.zipfiles が一般的
     a.datas,
     [],
     name='iRIC_DataScope-v1.1.3',
@@ -56,5 +65,4 @@ exe = EXE(
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    splash=splash,
 )

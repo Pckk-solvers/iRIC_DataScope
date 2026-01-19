@@ -1,18 +1,20 @@
 # ランチャー（起動ウィンドウ）
 
-入力（プロジェクトフォルダ / `.ipro` / CSV フォルダ）と出力フォルダを指定し、各機能（別ウィンドウ）を起動するための入口です。
+入力パス（フォルダ / `.ipro`）と出力フォルダを指定し、各機能（別ウィンドウ）を起動するための入口です。
 
 ![ランチャー](../images/launcher.png)
 
 ---
 
 ## 入力
-- **プロジェクトフォルダ**（推奨）
-  - 例: `Case1.cgn` / `Solution*.cgn` が含まれるフォルダ
-- **`.ipro`**
-  - iRIC のプロジェクトファイル
-- **CSV フォルダ**
-  - iRIC 出力の `Result_*.csv` が入っているフォルダ
+- **入力パス（フォルダ / `.ipro`）** を 1つ指定します。
+  - フォルダ指定の場合:
+    - **プロジェクトフォルダ**（推奨）: `Case1.cgn` / `Solution*.cgn` が含まれるフォルダ
+    - **CSV フォルダ**: iRIC 出力の `Result_*.csv` が入っているフォルダ
+  - ファイル指定の場合:
+    - **`.ipro`**: iRIC のプロジェクトファイル
+
+> 補足: 画面上は「フォルダ」「ファイル」ボタンで切り替えて選択します（指定できるのは常に 1つです）。
 
 ## 出力
 - 出力フォルダは、各機能が生成するファイルの保存先として使われます。
@@ -28,9 +30,9 @@
 
 ## ヘルプ
 - **Notion**: メニュー **ヘルプ → マニュアルを開く (Notion)**  
-  https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=73
+  - [iRIC tools Manual](https://trite-entrance-e6b.notion.site/iRIC_tools-1f4ed1e8e79f8084bf81e7cf1b960727?pvs=73)
 - **GitHub Pages**: メニュー **ヘルプ → ユーザーマニュアルを開く (GitHub Pages)**  
-  https://pckk-solvers.github.io/iRIC_DataScope/
+  - [iRIC_DataScope Docs](https://pckk-solvers.github.io/iRIC_DataScope/)
 
 ---
 

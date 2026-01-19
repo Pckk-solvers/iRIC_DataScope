@@ -5,6 +5,11 @@ site_dir: build_docs/site
 theme:
   name: readthedocs
 
+exclude_docs: |
+  notes/*
+  test_specs/*
+  specs/lr_wse_min_depth.md
+
 nav:
   - ドキュメント: index.md
   - ユーザ向け:
@@ -23,6 +28,10 @@ nav:
       - X-Y 分布画像出力: specs/xy_value_colormap_export.md
   - ビルド/配布:
       - PyInstaller: build_docs/pyinstaller.md
+  - リリースノート:
+      - v1.1.2: release_notes/v1.1.2.md
+      - v1.1.1: release_notes/v1.1.1.md
+      - v1.1.0: release_notes/v1.1.0.md
 
 markdown_extensions:
   - toc:

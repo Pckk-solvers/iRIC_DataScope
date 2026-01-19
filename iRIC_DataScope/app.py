@@ -9,6 +9,12 @@ import tkinter as tk
 import webbrowser
 import time
 
+# pyinstallerのスプラッシュを閉じる用
+try:
+    import pyi_splash
+except Exception:
+    pyi_splash = None 
+
 logger = logging.getLogger(__name__)
 
 """
@@ -30,6 +36,18 @@ class LauncherApp(tk.Tk):
         self._splash = None
         self._splash_image = None
         self._show_splash()
+        try:
+            self.update_idletasks()
+            self.update()
+        except Exception:
+            pass
+
+        # ← ここに入れる
+        if pyi_splash:
+            try:
+                pyi_splash.close()
+            except Exception:
+                pass
         # Force a paint before heavy initialization so splash is visible.
         try:
             self.update_idletasks()
@@ -73,9 +91,10 @@ class LauncherApp(tk.Tk):
         self.after(0, self._finish_startup)
 
     def _finish_startup(self) -> None:
-        self._hide_splash()
         self.deiconify()
-        self._center_window(self.winfo_width(), self.winfo_height())
+        self.update_idletasks()   # 初回描画を出す
+        self._hide_splash()
+        self.lift()
 
     def _resource_path(self, relative_path: Path) -> Path:
         if getattr(sys, "frozen", False):
@@ -88,37 +107,37 @@ class LauncherApp(tk.Tk):
         if not splash_path.is_file():
             logger.debug("LauncherApp: Splash image not found: %s", splash_path)
             return
-        self.withdraw()
+
+        self.withdraw()  # main window hidden
+
         splash = tk.Toplevel(self)
+        splash.withdraw()  # ★最初は出さない（ここが効く）
         splash.overrideredirect(True)
         splash.attributes("-topmost", True)
+
         try:
             image = tk.PhotoImage(file=str(splash_path))
         except Exception as exc:
             logger.warning("LauncherApp: Failed to load splash image: %s", exc)
             self.deiconify()
             return
-        target_w, target_h = 600, 330
-        iw, ih = image.width(), image.height()
-        if iw > 0 and ih > 0:
-            scale = min(target_w / iw, target_h / ih)
-            if scale < 1.0:
-                factor = int((1.0 / scale) + 0.999)
-                image = image.subsample(factor, factor)
-            elif scale > 1.0:
-                factor = int(scale)
-                if factor > 1:
-                    image = image.zoom(factor, factor)
-        label = tk.Label(splash, image=image, borderwidth=0)
+
+        label = tk.Label(splash, image=image, borderwidth=0, highlightthickness=0)
         label.pack()
+
+        # 画像サイズが確定した状態で geometry を決める
         splash.update_idletasks()
         width = image.width()
         height = image.height()
         x = (splash.winfo_screenwidth() - width) // 2
         y = (splash.winfo_screenheight() - height) // 2
         splash.geometry(f"{width}x{height}+{x}+{y}")
+
+        splash.deiconify()  # ★位置が決まってから表示
+        splash.lift()
+
         self._splash = splash
-        self._splash_image = image
+        self._splash_image = image  # keep reference
 
     def _hide_splash(self) -> None:
         if self._splash and self._splash.winfo_exists():
@@ -146,7 +165,6 @@ class LauncherApp(tk.Tk):
 
         # 余白として左右 20px、上下 20px を追加
         margin_x, margin_y = 20, 20
-        self.geometry(f"{w+margin_x}x{h+margin_y}")
         self.minsize(w+margin_x, h+margin_y)
         self._center_window(w + margin_x, h + margin_y)
         logger.debug(f"LauncherApp: Geometry set to {w+margin_x}x{h+margin_y}")
