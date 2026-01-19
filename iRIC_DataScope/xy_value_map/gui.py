@@ -21,7 +21,7 @@ from .data_prep import (
 from .edit_canvas import EditCanvasManager
 from .export_runner import run_export_all, run_export_single_step
 from .cache import PreviewFrameCache
-from .main import export_xy_value_map_step, export_xy_value_maps, figure_size_from_roi
+from .main import export_xy_value_map_step, export_xy_value_maps
 from .options import OutputOptions
 from .preview_renderer import PreviewRenderer
 from .state import GuiState
@@ -1732,7 +1732,6 @@ class _RangeSlider(tk.Canvas):
 
     def _redraw(self):
         self.delete("all")
-        width = max(self.winfo_width(), 1)
         height = max(self.winfo_height(), 1)
         y = height / 2.0
         x0, x1 = self._track_bounds()

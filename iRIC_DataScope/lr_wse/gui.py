@@ -16,13 +16,15 @@ import time
 # ロガー設定
 logger = logging.getLogger(__name__)
 
-# スクリプト単体実行時にパッケージを認識させる
-if __name__ == "__main__" and __package__ is None:
-    repo_root = Path(__file__).resolve().parent.parent.parent
-    sys.path.insert(0, str(repo_root))
-    __package__ = "iRIC_DataScope.lr_wse"
-
-from .main import run_lr_wse
+try:
+    from iRIC_DataScope.lr_wse.main import run_lr_wse
+except ModuleNotFoundError:
+    # スクリプト単体実行時のフォールバック
+    if __name__ == "__main__" and __package__ is None:
+        repo_root = Path(__file__).resolve().parent.parent.parent
+        sys.path.insert(0, str(repo_root))
+        __package__ = "iRIC_DataScope.lr_wse"
+        from iRIC_DataScope.lr_wse.main import run_lr_wse
 
 class LrWseGUI(tk.Toplevel):
     """

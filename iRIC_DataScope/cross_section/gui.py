@@ -19,13 +19,15 @@ from tkinter import filedialog, messagebox, ttk
 # ロガー設定
 logger = logging.getLogger(__name__)
 
-# スクリプト単体実行時にパッケージを認識させる
-if __name__ == "__main__" and __package__ is None:
-    project_root = Path(__file__).resolve().parent.parent.parent
-    sys.path.insert(0, str(project_root))
-    __package__ = "iRIC_DataScope.cross_section"
-
-from .plot_main import plot_main
+try:
+    from iRIC_DataScope.cross_section.plot_main import plot_main
+except ModuleNotFoundError:
+    # スクリプト単体実行時のフォールバック
+    if __name__ == "__main__" and __package__ is None:
+        project_root = Path(__file__).resolve().parent.parent.parent
+        sys.path.insert(0, str(project_root))
+        __package__ = "iRIC_DataScope.cross_section"
+        from iRIC_DataScope.cross_section.plot_main import plot_main
 
 class ProfilePlotGUI(tk.Toplevel):
     def __init__(self, master, input_dir: Path, output_dir: Path):

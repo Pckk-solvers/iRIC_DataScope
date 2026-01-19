@@ -8,7 +8,7 @@ import zipfile
 from contextlib import contextmanager
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generator, Iterable, Literal, Sequence
+from typing import Generator, Literal, Sequence
 
 import h5py
 import numpy as np
@@ -280,10 +280,10 @@ def iter_iric_step_frames(
             raise RuntimeError(f"CoordinateX shape {x.shape} != CoordinateY shape {y.shape}")
 
         order = "F" if fortran_order else "C"
-        I, J = np.indices(x.shape)
+        ii, jj = np.indices(x.shape)
         base_cols = {
-            "I": (I + 1).ravel(order=order),
-            "J": (J + 1).ravel(order=order),
+            "I": (ii + 1).ravel(order=order),
+            "J": (jj + 1).ravel(order=order),
             "X": x.ravel(order=order),
             "Y": y.ravel(order=order),
         }

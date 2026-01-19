@@ -6,9 +6,12 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Generator, Literal
+from typing import Generator, Literal, TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from iRIC_DataScope.common.cgns_reader import IricStepFrame
 
 
 @dataclass

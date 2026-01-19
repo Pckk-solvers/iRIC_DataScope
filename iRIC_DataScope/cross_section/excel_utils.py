@@ -5,8 +5,6 @@ from typing import Dict, Optional, Tuple
 
 import math
 import pandas as pd
-import numpy as np
-import xlsxwriter
 
 def write_profile_charts(
     grouped_data: Dict[float, Dict[float, pd.DataFrame]],

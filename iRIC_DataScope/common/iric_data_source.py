@@ -7,9 +7,8 @@ import tempfile
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, Literal
+from typing import Iterable, Literal, TYPE_CHECKING
 
-import numpy as np
 import pandas as pd
 
 from iRIC_DataScope.common.iric_project import (
@@ -21,6 +20,9 @@ from iRIC_DataScope.common.iric_project import (
 )
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from iRIC_DataScope.common.cgns_reader import IricStepFrame
 
 
 def _dedupe_columns(cols: list[str]) -> list[str]:

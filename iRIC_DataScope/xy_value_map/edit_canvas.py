@@ -99,9 +99,7 @@ def compute_roi_canvas_geometry(
         canvas_corners.extend([pt[0], pt[1]])
 
     theta = math.radians(roi.angle_deg)
-    ux = np.array([math.cos(theta), math.sin(theta)])
     uy = np.array([-math.sin(theta), math.cos(theta)])
-    half_w = 0.5 * roi.width
     half_h = 0.5 * roi.height
     height_vec = half_h * uy
     rotate_offset_px = max(handle_radius * 3.0, 18.0)

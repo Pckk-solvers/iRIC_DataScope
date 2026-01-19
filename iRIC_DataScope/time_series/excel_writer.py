@@ -32,7 +32,6 @@ def write_sheets(
             df.to_excel(writer, sheet_name=sheet_name, index=False)
 
             # カラム幅を自動調整
-            workbook  = writer.book
             worksheet = writer.sheets[sheet_name]
             for idx, col in enumerate(df.columns):
                 # データ長とヘッダ長の最大値 + 2 を幅に設定

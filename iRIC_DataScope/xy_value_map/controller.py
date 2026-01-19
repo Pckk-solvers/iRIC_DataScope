@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .processor import Roi, roi_corners
+from .processor import roi_corners
 from .roi_interaction import update_roi_from_drag
 
 if TYPE_CHECKING:
