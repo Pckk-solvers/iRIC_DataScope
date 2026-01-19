@@ -2,7 +2,7 @@
 
 指定した地点（格子点）に対して、複数ステップの値を集計し、Excel に時系列として出力する GUI ツールです。
 
-![時系列データ抽出（説明付き）](../images/time_series_ui_annotated.png)
+![時系列データ抽出](../images/time_series.png)
 
 ---
 
