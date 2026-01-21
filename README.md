@@ -14,7 +14,7 @@ iRIC の計算結果を解析・抽出・可視化する GUI ツールです。
 - uv（任意）
 
 ## セットアップ
-### uv を使う場合
+### uv を使う場合(やらなくてもよい)
 ```bash
 uv sync
 ```
@@ -27,12 +27,12 @@ pip install -r requirements.txt
 ## 使い方
 ### 推奨（uv）
 ```bash
-uv run python -m iRIC_DataScope.app
+uv run python main.py
 ```
 
 ### uv を使わない場合
 ```bash
-python -m iRIC_DataScope.app
+python main.py
 ```
 
 ## 実行ファイル
