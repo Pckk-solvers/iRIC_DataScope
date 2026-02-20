@@ -1,4 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
+import os
+import tomllib
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_data_files
@@ -7,6 +9,23 @@ from PyInstaller.building.splash import Splash
 ROOT = Path.cwd()
 APP_ENTRY = str(ROOT / "main.py")
 SPLASH_PATH = str(ROOT / "iRIC_DataScope" / "assets" / "splash.png")
+
+
+def resolve_version() -> str:
+    env_version = os.getenv("IRIC_DATASCOPE_VERSION")
+    if env_version:
+        return env_version
+    pyproject = ROOT / "pyproject.toml"
+    if pyproject.is_file():
+        data = tomllib.loads(pyproject.read_text(encoding="utf-8"))
+        project = data.get("project", {})
+        version = project.get("version")
+        if isinstance(version, str) and version.strip():
+            return version.strip()
+    return "0.0.0"
+
+
+BUILD_VERSION = resolve_version()
 
 datas = collect_data_files('matplotlib')
 hiddenimports = [
@@ -53,7 +72,7 @@ exe = EXE(
     a.zipfiles,      # ← ここ、[]じゃなく a.zipfiles が一般的
     a.datas,
     [],
-    name='iRIC_DataScope-v1.1.3',
+    name=f"iRIC_DataScope-v{BUILD_VERSION}",
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,

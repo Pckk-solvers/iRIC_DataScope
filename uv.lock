@@ -201,6 +201,9 @@ dependencies = [
 ]
 
 [package.dev-dependencies]
+build = [
+    { name = "pyinstaller" },
+]
 dev = [
     { name = "mkdocs" },
     { name = "mypy" },
@@ -221,6 +224,7 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
+build = [{ name = "pyinstaller", specifier = ">=6.17.0" }]
 dev = [
     { name = "mkdocs", specifier = ">=1.6.1" },
     { name = "mypy", specifier = ">=1.19.1" },

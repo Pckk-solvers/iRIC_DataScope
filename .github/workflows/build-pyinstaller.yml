@@ -1,0 +1,67 @@
+name: Build PyInstaller (Tag)
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install uv
+        run: python -m pip install --upgrade uv
+
+      - name: Resolve tag version
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          if (-not $tag.StartsWith("v")) {
+            throw "Tag must start with 'v'. got: $tag"
+          }
+          $version = $tag.Substring(1)
+          "IRIC_DATASCOPE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "ARCHIVE_NAME=iRIC_DataScope-$tag-windows-x64.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Sync dependencies for build
+        run: uv sync --frozen --group build --no-group dev
+
+      - name: Build EXE with PyInstaller
+        run: uv run pyinstaller --noconfirm iRIC_DataScope.spec
+
+      - name: Archive build output
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Compress-Archive -Path "dist\*" -DestinationPath "release\$env:ARCHIVE_NAME" -Force
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pyinstaller-windows
+          path: release/${{ env.ARCHIVE_NAME }}
+
+      - name: Create pre-release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          prerelease: true
+          generate_release_notes: true
+          body: |
+            Automated pre-release from tag `${{ github.ref_name }}`.
+
+            Included artifact:
+            - `${{ env.ARCHIVE_NAME }}`
+          files: release/${{ env.ARCHIVE_NAME }}
