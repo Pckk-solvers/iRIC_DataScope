@@ -38,12 +38,19 @@ class LeftPanelBuilder:
         preview_frame.grid(row=row, column=0, sticky="ew", padx=6, pady=6)
         preview_frame.columnconfigure(0, weight=0)
         preview_frame.columnconfigure(1, weight=1)
-        ttk.Label(preview_frame, text="Value:").grid(row=0, column=0, sticky="e", **pad)
+        ttk.Label(preview_frame, text="解析位置:").grid(row=0, column=0, sticky="e", **pad)
+        mode_frame = ttk.Frame(preview_frame)
+        mode_frame.grid(row=0, column=1, sticky="w", **pad)
+        widgets["grid_node_radio"] = ttk.Radiobutton(mode_frame, text="ノード", value="node", variable=gui.grid_location_var)
+        widgets["grid_cell_radio"] = ttk.Radiobutton(mode_frame, text="セル", value="cell", variable=gui.grid_location_var)
+        widgets["grid_node_radio"].pack(side="left")
+        widgets["grid_cell_radio"].pack(side="left", padx=(8, 0))
+        ttk.Label(preview_frame, text="Value:").grid(row=1, column=0, sticky="e", **pad)
         widgets["value_combo"] = ttk.Combobox(preview_frame, textvariable=gui.value_var, state="readonly", width=24)
-        widgets["value_combo"].grid(row=0, column=1, sticky="ew", **pad)
-        ttk.Label(preview_frame, text="step:").grid(row=1, column=0, sticky="e", **pad)
+        widgets["value_combo"].grid(row=1, column=1, sticky="ew", **pad)
+        ttk.Label(preview_frame, text="step:").grid(row=2, column=0, sticky="e", **pad)
         widgets["step_spin"] = tk.Spinbox(preview_frame, from_=1, to=max(1, gui._step_count), textvariable=gui.step_var, width=8, command=gui._on_step_changed)
-        widgets["step_spin"].grid(row=1, column=1, sticky="w", **pad)
+        widgets["step_spin"].grid(row=2, column=1, sticky="w", **pad)
         row += 1
 
         # 色/スケール

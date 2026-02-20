@@ -182,12 +182,20 @@ class VariableSelector(ttk.Frame):
     """
     ディレクトリ内 CSV のヘッダーから変数選択用チェックボックスUI
     """
-    def __init__(self, master, initial_dir: str | None = None):
+    def __init__(
+        self,
+        master,
+        initial_dir: str | None = None,
+        *,
+        grid_location_var: tk.StringVar | None = None,
+    ):
         super().__init__(master, padding=(PAD_X, PAD_Y))
         self.checks: dict[str, tk.BooleanVar] = {}
         self.sample_dir = initial_dir or ""
+        self.grid_location_var = grid_location_var or tk.StringVar(value="node")
         self._build_ui()
         self._bind_dir_change(master)
+        self.grid_location_var.trace_add("write", lambda *_: self.refresh(self.sample_dir))
 
     def _bind_dir_change(self, master):
         """ディレクトリ変更時に UI を再構築"""
@@ -203,6 +211,12 @@ class VariableSelector(ttk.Frame):
         self.checks.clear()
         columns: list[str] = []
 
+        mode_row = ttk.Frame(self)
+        mode_row.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 4))
+        ttk.Label(mode_row, text="解析位置:", font=FONT_MAIN).pack(side="left")
+        ttk.Radiobutton(mode_row, text="ノード", value="node", variable=self.grid_location_var).pack(side="left", padx=(8, 4))
+        ttk.Radiobutton(mode_row, text="セル", value="cell", variable=self.grid_location_var).pack(side="left", padx=4)
+
         # サンプル CSV からカラム一覧を取得
         if self.sample_dir:
             try:
@@ -210,7 +224,7 @@ class VariableSelector(ttk.Frame):
 
                 p = Path(self.sample_dir)
                 if p.exists():
-                    data_source = DataSource.from_input(p)
+                    data_source = DataSource.from_input(p, grid_location=self.get_grid_location())
                     try:
                         columns = data_source.list_value_columns()
                     finally:
@@ -218,11 +232,11 @@ class VariableSelector(ttk.Frame):
             except Exception as e:
                 logger.error(f"VariableSelector: {e}")
 
-        ttk.Label(self, text="抽出変数:", font=FONT_MAIN).grid(row=0, column=0, sticky='w')
+        ttk.Label(self, text="抽出変数:", font=FONT_MAIN).grid(row=1, column=0, sticky='w')
         for idx, col in enumerate(columns):
             var = tk.BooleanVar(value=False)
             cb = ttk.Checkbutton(self, text=col, variable=var)
-            cb.grid(row=idx//4 + 1, column=idx%4, sticky='w')
+            cb.grid(row=idx//4 + 2, column=idx%4, sticky='w')
             self.checks[col] = var
 
     def refresh(self, sample_dir: str):
@@ -238,6 +252,10 @@ class VariableSelector(ttk.Frame):
             raise ValueError("変数未選択")
         logger.info(f"抽出変数: {selected}")
         return selected
+
+    def get_grid_location(self) -> str:
+        raw = (self.grid_location_var.get() or "node").strip().lower()
+        return "cell" if raw == "cell" else "node"
 
 
 class TimeSeriesGUI(tk.Toplevel):
@@ -318,7 +336,12 @@ class TimeSeriesGUI(tk.Toplevel):
         self.grid_sel.pack(fill="both", expand=True, padx=PAD_X, pady=PAD_Y)
 
         # 変数選択セレクタ
-        self.var_sel = VariableSelector(self, initial_dir=self.input_dir)
+        self.grid_location_var = tk.StringVar(value="node")
+        self.var_sel = VariableSelector(
+            self,
+            initial_dir=self.input_dir,
+            grid_location_var=self.grid_location_var,
+        )
         self.var_sel.pack(fill="x", padx=PAD_X, pady=PAD_Y)
 
 
@@ -339,8 +362,9 @@ class TimeSeriesGUI(tk.Toplevel):
             out_file = out_dir / self.file_name_var.get()
             points = self.grid_sel.get_points()
             variables = self.var_sel.get_variables()
+            grid_location = self.var_sel.get_grid_location()
             # データ集計とシート出力
-            data = aggregate_all(in_dir, points, variables)
+            data = aggregate_all(in_dir, points, variables, grid_location=grid_location)
             write_sheets(data, str(out_file))
             if messagebox.showinfo("完了", f"出力ファイル: {out_file}\n処理完了しました。")== "ok":
                 self.destroy()

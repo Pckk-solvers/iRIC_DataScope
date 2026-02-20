@@ -54,6 +54,14 @@ class XYValueMapController:
         gui.state.edit.map_dirty = True
         gui._schedule_view_update(immediate=True)
 
+    def on_grid_location_changed(self):
+        gui = self.gui
+        if not gui._data_ready:
+            return
+        gui._preview_frame_cache.clear()
+        gui._invalidate_global_scale()
+        gui._reload_data_source_for_grid_location()
+
     def on_color_changed(self):
         gui = self.gui
         gui.min_color_sample.configure(background=gui.min_color_var.get())

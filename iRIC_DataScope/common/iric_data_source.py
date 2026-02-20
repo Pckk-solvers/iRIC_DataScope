@@ -46,12 +46,20 @@ def _parse_step_number(path: Path) -> int | None:
 
 
 def _list_flow_solution_names(f, zone_path: str) -> list[str]:
+    return _list_solution_names_by_prefix(f, zone_path, prefix="flowsolution")
+
+
+def _list_flow_cell_solution_names(f, zone_path: str) -> list[str]:
+    return _list_solution_names_by_prefix(f, zone_path, prefix="flowcellsolution")
+
+
+def _list_solution_names_by_prefix(f, zone_path: str, *, prefix: str) -> list[str]:
     if zone_path not in f:
         return []
     zone = f[zone_path]
     names: list[str] = []
     for name, obj in zone.items():
-        if hasattr(obj, "keys") and name.lower().startswith("flowsolution"):
+        if hasattr(obj, "keys") and name.lower().startswith(prefix):
             names.append(name)
     if not names:
         return []
@@ -63,6 +71,17 @@ def _list_flow_solution_names(f, zone_path: str) -> list[str]:
         return (1, n.lower())
 
     return sorted(names, key=sort_key)
+
+
+def _compute_cell_centers(a):
+    import numpy as _np
+
+    arr = _np.asarray(a)
+    if arr.ndim != 2:
+        raise RuntimeError(f"Expected 2D grid for cell-center conversion, got shape={arr.shape}")
+    if arr.shape[0] < 2 or arr.shape[1] < 2:
+        raise RuntimeError(f"Grid is too small for cell-center conversion: shape={arr.shape}")
+    return 0.25 * (arr[:-1, :-1] + arr[:-1, 1:] + arr[1:, :-1] + arr[1:, 1:])
 
 
 def _list_result_csv_files(input_dir: Path) -> list[Path]:
@@ -115,6 +134,7 @@ class DataSource:
 
     input_path: Path
     kind: Literal["cgns", "cgns_series", "csv_dir"]
+    grid_location: Literal["node", "cell"] = "node"
     cgn_path: Path | None = None
     cgn_paths: list[Path] | None = None
     _tmpdir: tempfile.TemporaryDirectory | None = None
@@ -126,31 +146,36 @@ class DataSource:
     _csv_files: list[Path] | None = None
 
     @classmethod
-    def from_input(cls, input_path: Path) -> "DataSource":
+    def from_input(
+        cls,
+        input_path: Path,
+        *,
+        grid_location: Literal["node", "cell"] = "node",
+    ) -> "DataSource":
         p = Path(input_path)
         if p.is_dir():
             kind = classify_input_dir(p)
             if kind == "csv_dir":
-                ds = cls(input_path=p, kind="csv_dir")
+                ds = cls(input_path=p, kind="csv_dir", grid_location=grid_location)
                 ds._init_csv_dir()
                 return ds
             if list_solution_cgns_in_dir(p):
-                ds = cls(input_path=p, kind="cgns_series")
+                ds = cls(input_path=p, kind="cgns_series", grid_location=grid_location)
                 ds._init_cgns_series()
             else:
-                ds = cls(input_path=p, kind="cgns")
+                ds = cls(input_path=p, kind="cgns", grid_location=grid_location)
                 ds._init_cgns()
             return ds
         if p.suffix.lower() == ".ipro":
             if list_solution_cgns_in_ipro(p):
-                ds = cls(input_path=p, kind="cgns_series")
+                ds = cls(input_path=p, kind="cgns_series", grid_location=grid_location)
                 ds._init_cgns_series()
             else:
-                ds = cls(input_path=p, kind="cgns")
+                ds = cls(input_path=p, kind="cgns", grid_location=grid_location)
                 ds._init_cgns()
             return ds
         if p.suffix.lower() == ".cgn":
-            ds = cls(input_path=p, kind="cgns")
+            ds = cls(input_path=p, kind="cgns", grid_location=grid_location)
             ds._init_cgns()
             return ds
         raise ValueError(f"未対応の入力です: {p}")
@@ -189,29 +214,35 @@ class DataSource:
 
         with h5py.File(self.cgn_path, "r") as f:
             zone = self.zone_path.strip("/")
-            ptr_path = f"{zone}/ZoneIterativeData/FlowSolutionPointers"
-            if ptr_path in f:
-                try:
-                    ptr = f[ptr_path][(" data")]
-                    a = _np.asarray(ptr[()])
-                    self.step_count = int(a.shape[0])
-                except Exception as e:
-                    logger.info("FlowSolutionPointers の読み込みに失敗したためフォールバックします: %s", e)
-                    self.step_count = 0
-            else:
-                self.step_count = 0
+            self.step_count = 0
+            if self.grid_location == "node":
+                ptr_path = f"{zone}/ZoneIterativeData/FlowSolutionPointers"
+                if ptr_path in f:
+                    try:
+                        ptr = f[ptr_path][(" data")]
+                        a = _np.asarray(ptr[()])
+                        self.step_count = int(a.shape[0])
+                    except Exception as e:
+                        logger.info("FlowSolutionPointers の読み込みに失敗したためフォールバックします: %s", e)
+                        self.step_count = 0
 
             if self.step_count <= 0:
-                sol_names = _list_flow_solution_names(f, zone)
+                if self.grid_location == "cell":
+                    sol_names = _list_flow_cell_solution_names(f, zone)
+                else:
+                    sol_names = _list_flow_solution_names(f, zone)
                 if sol_names:
                     self.step_count = len(sol_names)
                 else:
-                    logger.info("FlowSolutionPointers/FlowSolution が見つからないため step=1 として扱います")
+                    logger.info("FlowSolution が見つからないため step=1 として扱います")
                     self.step_count = 1
             self.steps = list(range(1, self.step_count + 1))
 
             x = _np.asarray(f[f"{zone}/GridCoordinates/CoordinateX"][" data"][()])
             y = _np.asarray(f[f"{zone}/GridCoordinates/CoordinateY"][" data"][()])
+            if self.grid_location == "cell":
+                x = _compute_cell_centers(x)
+                y = _compute_cell_centers(y)
             self.domain_bounds = (float(x.min()), float(x.max()), float(y.min()), float(y.max()))
 
     def _init_cgns_series(self) -> None:
@@ -261,6 +292,9 @@ class DataSource:
                 raise KeyError(f"{zone} が見つかりません: {extracted[0]}")
             x = _np.asarray(f[f"{zone}/GridCoordinates/CoordinateX"][" data"][()])
             y = _np.asarray(f[f"{zone}/GridCoordinates/CoordinateY"][" data"][()])
+            if self.grid_location == "cell":
+                x = _compute_cell_centers(x)
+                y = _compute_cell_centers(y)
             self.domain_bounds = (float(x.min()), float(x.max()), float(y.min()), float(y.max()))
 
     def list_value_columns(self) -> list[str]:
@@ -284,18 +318,25 @@ class DataSource:
 
         with h5py.File(cgn_path, "r") as f:
             x = f[f"{zone}/GridCoordinates/CoordinateX"][" data"]
-            coord_shape = tuple(x.shape)
-            ptr_path = f"{zone}/ZoneIterativeData/FlowSolutionPointers"
+            if self.grid_location == "cell":
+                coord_shape = (int(x.shape[0]) - 1, int(x.shape[1]) - 1)
+            else:
+                coord_shape = tuple(x.shape)
             first_name = ""
-            if ptr_path in f:
-                try:
-                    ptr = _np.asarray(f[ptr_path][" data"][()])
-                    if ptr.ndim == 2 and ptr.shape[0] >= 1:
-                        first_name = bytes(ptr[0].tolist()).decode("ascii", errors="ignore").replace("\x00", "").strip()
-                except Exception:
-                    first_name = ""
+            if self.grid_location == "node":
+                ptr_path = f"{zone}/ZoneIterativeData/FlowSolutionPointers"
+                if ptr_path in f:
+                    try:
+                        ptr = _np.asarray(f[ptr_path][" data"][()])
+                        if ptr.ndim == 2 and ptr.shape[0] >= 1:
+                            first_name = bytes(ptr[0].tolist()).decode("ascii", errors="ignore").replace("\x00", "").strip()
+                    except Exception:
+                        first_name = ""
             if not first_name:
-                sol_names = _list_flow_solution_names(f, zone)
+                if self.grid_location == "cell":
+                    sol_names = _list_flow_cell_solution_names(f, zone)
+                else:
+                    sol_names = _list_flow_solution_names(f, zone)
                 if not sol_names:
                     return []
                 first_name = sol_names[0]
@@ -350,6 +391,7 @@ class DataSource:
         yield from iter_iric_step_frames(
             self.cgn_path,
             zone_path=self.zone_path,
+            grid_location=self.grid_location,
             vars_keep=value_cols,
             step_from=1,
             step_to=self.step_count,
@@ -366,6 +408,7 @@ class DataSource:
         gen = iter_iric_step_frames(
             self.cgn_path,
             zone_path=self.zone_path,
+            grid_location=self.grid_location,
             vars_keep=value_cols,
             step_from=step,
             step_to=step,
@@ -385,6 +428,7 @@ class DataSource:
             gen = iter_iric_step_frames(
                 cgn_path,
                 zone_path=self.zone_path,
+                grid_location=self.grid_location,
                 vars_keep=value_cols,
                 step_from=1,
                 step_to=1,
@@ -420,6 +464,7 @@ class DataSource:
         gen = iter_iric_step_frames(
             cgn_path,
             zone_path=self.zone_path,
+            grid_location=self.grid_location,
             vars_keep=value_cols,
             step_from=1,
             step_to=1,

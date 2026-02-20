@@ -130,6 +130,7 @@ class XYValueMapGUI(tk.Toplevel):
 
         self.input_var = tk.StringVar(value=str(self.input_path))
         self.output_var = tk.StringVar(value=str(self.output_dir))
+        self.grid_location_var = tk.StringVar(value="node")
         self.value_var = tk.StringVar()
         self.step_var = tk.IntVar(value=1)
         self.min_color_var = tk.StringVar(value="#0000ff")
@@ -165,6 +166,8 @@ class XYValueMapGUI(tk.Toplevel):
         left_builder = LeftPanelBuilder(self)
         left_widgets = left_builder.build(left_frame, gui=self)
         self.value_combo = left_widgets["value_combo"]
+        self.grid_node_radio = left_widgets["grid_node_radio"]
+        self.grid_cell_radio = left_widgets["grid_cell_radio"]
         self.step_spin = left_widgets["step_spin"]
         self.min_color_btn = left_widgets["min_color_btn"]
         self.min_color_sample = left_widgets["min_color_sample"]
@@ -192,6 +195,7 @@ class XYValueMapGUI(tk.Toplevel):
         self.run_btn = left_widgets["run_btn"]
 
         self.value_combo.bind("<<ComboboxSelected>>", lambda e: self._on_value_changed())
+        self.grid_location_var.trace_add("write", lambda *_: self._on_grid_location_changed())
         self.step_var.trace_add("write", lambda *_: self._on_step_changed())
         self.min_color_var.trace_add("write", lambda *_: self._on_color_changed())
         self.max_color_var.trace_add("write", lambda *_: self._on_color_changed())
@@ -252,6 +256,8 @@ class XYValueMapGUI(tk.Toplevel):
 
         self._interactive_widgets = [
             self.value_combo,
+            self.grid_node_radio,
+            self.grid_cell_radio,
             self.step_spin,
             self.min_color_btn,
             self.max_color_btn,
@@ -326,13 +332,27 @@ class XYValueMapGUI(tk.Toplevel):
     def _start_initial_load(self):
         if self._data_ready:
             return
+        self._load_data_source_async(destroy_on_error=True)
+
+    def _selected_grid_location(self) -> str:
+        raw = (self.grid_location_var.get() or "node").strip().lower()
+        return "cell" if raw == "cell" else "node"
+
+    def _load_data_source_async(self, *, destroy_on_error: bool):
+        selected_location = self._selected_grid_location()
+        self._set_controls_enabled(False)
+        self.status_var.set("Loading...")
 
         def worker():
+            ds = None
             try:
-                ds = DataSource.from_input(self.input_path)
+                ds = DataSource.from_input(self.input_path, grid_location=selected_location)
                 vars_ = ds.list_value_columns()
                 if not vars_:
-                    raise ValueError("入力データに利用可能な変数が見つかりませんでした。")
+                    location_text = "セル" if selected_location == "cell" else "ノード"
+                    raise ValueError(
+                        f"入力データに利用可能な変数が見つかりませんでした（{location_text}）。"
+                    )
                 base_dx, base_dy = 1.0, 1.0
                 try:
                     frame0 = ds.get_frame(step=1, value_col=vars_[0])
@@ -340,18 +360,34 @@ class XYValueMapGUI(tk.Toplevel):
                 except Exception:
                     base_dx, base_dy = 1.0, 1.0
             except Exception as e:
+                if ds is not None:
+                    try:
+                        ds.close()
+                    except Exception:
+                        pass
                 err = e
 
                 def on_err(err=err):
-                    messagebox.showerror("エラー", f"入力データの読み込みに失敗しました:\n{err}")
-                    self.destroy()
+                    if destroy_on_error:
+                        messagebox.showerror("エラー", f"入力データの読み込みに失敗しました:\n{err}")
+                        self.destroy()
+                        return
+                    messagebox.showerror("エラー", f"入力データの再読み込みに失敗しました:\n{err}")
+                    if self._data_ready:
+                        self._set_controls_enabled(True)
+                        self.status_var.set("")
 
                 self.after(0, on_err)
                 return
 
             def on_done():
                 if not self.winfo_exists() or not getattr(self, "step_spin", None) or not self.step_spin.winfo_exists():
+                    try:
+                        ds.close()
+                    except Exception:
+                        pass
                     return
+                old_data_source = self._data_source
                 self._data_source = ds
                 self._data_ready = True
                 self._value_columns = vars_
@@ -363,10 +399,20 @@ class XYValueMapGUI(tk.Toplevel):
                 self.status_var.set("")
                 self._init_defaults()
                 self._set_controls_enabled(True)
+                if old_data_source and old_data_source is not ds:
+                    try:
+                        old_data_source.close()
+                    except Exception:
+                        pass
 
             self.after(0, on_done)
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _reload_data_source_for_grid_location(self):
+        if not self._data_ready:
+            return
+        self._load_data_source_async(destroy_on_error=False)
 
     def _build_edit_canvas(self, parent):
         self.edit_canvas = tk.Canvas(parent, highlightthickness=0, background="#ffffff")
@@ -521,6 +567,9 @@ class XYValueMapGUI(tk.Toplevel):
 
     def _on_step_changed(self):
         return self.controller.on_step_changed()
+
+    def _on_grid_location_changed(self):
+        return self.controller.on_grid_location_changed()
 
     def _choose_color(self, var: tk.StringVar):
         current = var.get()
@@ -891,10 +940,14 @@ class XYValueMapGUI(tk.Toplevel):
         self.state.scale.ratio = ratio
         new_vmin, new_vmax = self._values_from_ratio(ratio[0], ratio[1])
         if hasattr(self, "range_slider"):
-            self.range_slider.set_range(vmin, vmax, keep_values=False)
-            self.range_slider.set_values(new_vmin, new_vmax)
-            if self.scale_mode.get() == "manual":
-                self.range_slider.set_enabled(True)
+            try:
+                if self.range_slider.winfo_exists():
+                    self.range_slider.set_range(vmin, vmax, keep_values=False)
+                    self.range_slider.set_values(new_vmin, new_vmax)
+                    if self.scale_mode.get() == "manual":
+                        self.range_slider.set_enabled(True)
+            except tk.TclError:
+                return
         changed = self._set_manual_scale_vars_if_changed(new_vmin, new_vmax)
         if self.scale_mode.get() == "manual":
             self._sync_slider_from_vars()
@@ -1446,23 +1499,40 @@ class XYValueMapGUI(tk.Toplevel):
         if self._data_source is None:
             return
 
+        def _gui_alive() -> bool:
+            try:
+                return bool(self.winfo_exists())
+            except tk.TclError:
+                return False
+
         def on_status(text: str):
+            if not _gui_alive():
+                return
             self.status_var.set(text)
 
         def on_empty():
+            if not _gui_alive():
+                return
             self._clear_auto_range()
             self.status_var.set("ROI内に有効な値がありません。")
 
         def on_error(err: Exception):
+            if not _gui_alive():
+                return
             logger.exception("globalスケール計算に失敗")
             self.status_var.set("")
             messagebox.showerror("エラー", f"globalスケール計算に失敗しました:\n{err}")
 
         def on_done(vmin: float, vmax: float):
+            if not _gui_alive():
+                return
             self.status_var.set("")
             self._set_auto_range(vmin, vmax)
+            self._schedule_view_update(immediate=True)
 
         def on_token_mismatch():
+            if not _gui_alive():
+                return
             self._schedule_view_update(immediate=True)
 
         self._global_scale.ensure_async(
@@ -1731,30 +1801,35 @@ class _RangeSlider(tk.Canvas):
         self._emit()
 
     def _redraw(self):
-        self.delete("all")
-        height = max(self.winfo_height(), 1)
-        y = height / 2.0
-        x0, x1 = self._track_bounds()
+        try:
+            if not self.winfo_exists():
+                return
+            self.delete("all")
+            height = max(self.winfo_height(), 1)
+            y = height / 2.0
+            x0, x1 = self._track_bounds()
 
-        track_color = "#dddddd" if self._enabled else "#eeeeee"
-        range_color = "#7aa6ff" if self._enabled else "#dddddd"
-        handle_color = "#2b78e4" if self._enabled else "#aaaaaa"
+            track_color = "#dddddd" if self._enabled else "#eeeeee"
+            range_color = "#7aa6ff" if self._enabled else "#dddddd"
+            handle_color = "#2b78e4" if self._enabled else "#aaaaaa"
 
-        self.create_line(x0, y, x1, y, fill=track_color, width=4, capstyle=tk.ROUND)
-        hx_min = self._value_to_x(self._vmin)
-        hx_max = self._value_to_x(self._vmax)
-        self.create_line(hx_min, y, hx_max, y, fill=range_color, width=4, capstyle=tk.ROUND)
+            self.create_line(x0, y, x1, y, fill=track_color, width=4, capstyle=tk.ROUND)
+            hx_min = self._value_to_x(self._vmin)
+            hx_max = self._value_to_x(self._vmax)
+            self.create_line(hx_min, y, hx_max, y, fill=range_color, width=4, capstyle=tk.ROUND)
 
-        for hx in (hx_min, hx_max):
-            self.create_oval(
-                hx - self._radius,
-                y - self._radius,
-                hx + self._radius,
-                y + self._radius,
-                fill=handle_color,
-                outline="#333333",
-                width=1,
-            )
+            for hx in (hx_min, hx_max):
+                self.create_oval(
+                    hx - self._radius,
+                    y - self._radius,
+                    hx + self._radius,
+                    y + self._radius,
+                    fill=handle_color,
+                    outline="#333333",
+                    width=1,
+                )
+        except tk.TclError:
+            return
 
 
 class _ProgressWindow:

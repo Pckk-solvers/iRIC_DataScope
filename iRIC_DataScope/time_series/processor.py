@@ -68,7 +68,9 @@ def extract_records(
 def aggregate_all(
     input_path: Path | str,
     grid_points: List[Tuple[int, int]],
-    variables: List[str]
+    variables: List[str],
+    *,
+    grid_location: str = "node",
 ) -> Dict[Tuple[int, int], pd.DataFrame]:
     """
     入力パスの全ステップを処理し、格子点ごとの時系列 DataFrame をまとめて返す
@@ -102,7 +104,7 @@ def aggregate_all(
             except Exception:
                 logger.error(f"CSV 処理失敗: {path}", exc_info=True)
     else:
-        data_source = DataSource.from_input(input_path)
+        data_source = DataSource.from_input(input_path, grid_location=grid_location)
         try:
             frames = data_source.iter_frames_with_columns(value_cols=variables)
             for frame in frames:

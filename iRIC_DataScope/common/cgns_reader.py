@@ -116,25 +116,31 @@ def _grid_location(sol_group: h5py.Group) -> str | None:
         return _normalize_location(sol_group.attrs["GridLocation"])
     if "GridLocation" in sol_group:
         try:
-            return _normalize_location(sol_group["GridLocation"][()])
+            arr = _read_dataset_or_group(sol_group["GridLocation"])
+            return _normalize_location(arr)
         except Exception:
             return None
     return None
 
 
 def _load_flow_solutions(
-    f: h5py.File, zone_path: str
+    f: h5py.File,
+    zone_path: str,
+    *,
+    grid_location: Literal["node", "cell"] = "node",
 ) -> tuple[list[str], list[str | None], set[str]]:
-    pointers_path = f"{zone_path}/ZoneIterativeData/FlowSolutionPointers"
     pointers: list[str] = []
-    if pointers_path in f:
-        try:
-            pointers = _decode_flow_solution_pointers_int8(_read_node_data(f, pointers_path))
-        except Exception as e:
-            logger.debug("Failed to read FlowSolutionPointers: %s", e)
-
-    if not pointers:
-        pointers = _list_flow_solution_groups(f, zone_path)
+    if grid_location == "node":
+        pointers_path = f"{zone_path}/ZoneIterativeData/FlowSolutionPointers"
+        if pointers_path in f:
+            try:
+                pointers = _decode_flow_solution_pointers_int8(_read_node_data(f, pointers_path))
+            except Exception as e:
+                logger.debug("Failed to read FlowSolutionPointers: %s", e)
+        if not pointers:
+            pointers = _list_flow_solution_groups(f, zone_path)
+    else:
+        pointers = _list_flow_cell_solution_groups(f, zone_path)
 
     locations: list[str | None] = []
     location_set: set[str] = set()
@@ -150,12 +156,20 @@ def _load_flow_solutions(
 
 
 def _list_flow_solution_groups(f: h5py.File, zone_path: str) -> list[str]:
+    return _list_solution_groups(f, zone_path, prefix="flowsolution")
+
+
+def _list_flow_cell_solution_groups(f: h5py.File, zone_path: str) -> list[str]:
+    return _list_solution_groups(f, zone_path, prefix="flowcellsolution")
+
+
+def _list_solution_groups(f: h5py.File, zone_path: str, *, prefix: str) -> list[str]:
     if zone_path not in f:
         return []
     zone = f[zone_path]
     names: list[str] = []
     for name, obj in zone.items():
-        if isinstance(obj, h5py.Group) and name.lower().startswith("flowsolution"):
+        if isinstance(obj, h5py.Group) and name.lower().startswith(prefix):
             names.append(name)
     if not names:
         return []
@@ -167,6 +181,14 @@ def _list_flow_solution_groups(f: h5py.File, zone_path: str) -> list[str]:
         return (1, n.lower())
 
     return sorted(names, key=sort_key)
+
+
+def _compute_cell_centers(a: np.ndarray) -> np.ndarray:
+    if a.ndim != 2:
+        raise RuntimeError(f"Expected 2D grid for cell-center conversion, got shape={a.shape}")
+    if a.shape[0] < 2 or a.shape[1] < 2:
+        raise RuntimeError(f"Grid is too small for cell-center conversion: shape={a.shape}")
+    return 0.25 * (a[:-1, :-1] + a[:-1, 1:] + a[1:, :-1] + a[1:, 1:])
 
 
 def _pick_preferred_location(
@@ -260,6 +282,7 @@ def iter_iric_step_frames(
     cgn_path: Path,
     *,
     zone_path: str = "iRIC/iRICZone",
+    grid_location: Literal["node", "cell"] = "node",
     vars_keep: list[str] | None = None,
     step_from: int = 1,
     step_to: int | None = None,
@@ -279,19 +302,30 @@ def iter_iric_step_frames(
         if x.shape != y.shape:
             raise RuntimeError(f"CoordinateX shape {x.shape} != CoordinateY shape {y.shape}")
 
+        if grid_location == "cell":
+            grid_x = _compute_cell_centers(x)
+            grid_y = _compute_cell_centers(y)
+        else:
+            grid_x = x
+            grid_y = y
+
         order = "F" if fortran_order else "C"
-        ii, jj = np.indices(x.shape)
+        ii, jj = np.indices(grid_x.shape)
         base_cols = {
             "I": (ii + 1).ravel(order=order),
             "J": (jj + 1).ravel(order=order),
-            "X": x.ravel(order=order),
-            "Y": y.ravel(order=order),
+            "X": grid_x.ravel(order=order),
+            "Y": grid_y.ravel(order=order),
         }
 
         time_values = try_read_timevalues(f, zone_path)
 
         if include_flow_solution:
-            sol_names, sol_locations, location_set = _load_flow_solutions(f, zone_path)
+            sol_names, sol_locations, location_set = _load_flow_solutions(
+                f,
+                zone_path,
+                grid_location=grid_location,
+            )
             preferred = _pick_preferred_location(location_set, location_preference)
             if preferred:
                 logger.info("Preferred GridLocation: %s", preferred)
@@ -341,8 +375,8 @@ def iter_iric_step_frames(
                         logger.debug("Skip var %s: read error: %s", v, ex)
                         continue
 
-                    if arr.shape != x.shape:
-                        logger.debug("Skip var %s: shape %s != %s", v, arr.shape, x.shape)
+                    if arr.shape != grid_x.shape:
+                        logger.debug("Skip var %s: shape %s != %s", v, arr.shape, grid_x.shape)
                         continue
                     cols[v] = arr.ravel(order=order)
 
@@ -354,7 +388,7 @@ def iter_iric_step_frames(
                     t_val = 0.0
 
             df = pd.DataFrame(cols)
-            imax, jmax = x.shape
+            imax, jmax = grid_x.shape
             yield IricStepFrame(
                 step=step,
                 time=t_val,
