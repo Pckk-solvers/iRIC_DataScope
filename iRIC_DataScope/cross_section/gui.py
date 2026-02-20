@@ -212,7 +212,7 @@ class ProfilePlotGUI(tk.Toplevel):
         out_dir = Path(self.output_var.get())
         logger.debug(f"入力フォルダ: {in_dir}, 出力フォルダ: {out_dir}")
         
-        in_ok = in_dir.is_dir() or (in_dir.is_file() and in_dir.suffix.lower() == ".ipro")
+        in_ok = in_dir.is_dir() or (in_dir.is_file() and in_dir.suffix.lower() in {".ipro", ".cgn"})
         if not in_ok:
             logger.error(f"入力フォルダが無効: {in_dir}")
             messagebox.showerror("エラー", f"入力が無効です:\n{in_dir}")

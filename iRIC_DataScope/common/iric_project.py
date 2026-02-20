@@ -122,4 +122,4 @@ def is_valid_input_path(input_path: Path | None, case_name: str = "Case1.cgn") -
             return True
         except Exception:
             return False
-    return input_path.is_file() and input_path.suffix.lower() == ".ipro"
+    return input_path.is_file() and input_path.suffix.lower() in {".ipro", ".cgn"}

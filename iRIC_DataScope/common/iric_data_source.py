@@ -108,7 +108,7 @@ def _read_iric_result_csv(
 @dataclass
 class DataSource:
     """
-    入力（プロジェクトフォルダ/.ipro/CSVフォルダ）を統一的に扱うための薄いアダプタ。
+    入力（プロジェクトフォルダ/.ipro/.cgn/CSVフォルダ）を統一的に扱うための薄いアダプタ。
     - CGNS は session 中に一度だけ展開して使い回す（.ipro でも毎回展開しない）
     - ipro 内に Solution*.cgn が存在する場合は、それらをステップ系列として扱う
     """
@@ -150,7 +150,9 @@ class DataSource:
                 ds._init_cgns()
             return ds
         if p.suffix.lower() == ".cgn":
-            raise ValueError("CGNS 単体の入力はサポートしていません。プロジェクトフォルダを指定してください。")
+            ds = cls(input_path=p, kind="cgns")
+            ds._init_cgns()
+            return ds
         raise ValueError(f"未対応の入力です: {p}")
 
     def close(self) -> None:
@@ -172,6 +174,8 @@ class DataSource:
             if info.kind != "single":
                 raise RuntimeError("Solution*.cgn が見つかりました。series モードで初期化してください。")
             self.cgn_path = info.paths[0]
+        elif self.input_path.suffix.lower() == ".cgn":
+            self.cgn_path = self.input_path
         else:
             self._tmpdir = tempfile.TemporaryDirectory(prefix="ipro_session_")
             td_path = Path(self._tmpdir.name)

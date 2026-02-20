@@ -38,7 +38,7 @@ def run_lr_wse(
 ) -> Path:
     """
     iRIC 左右岸最大水位整理の共通処理。
-    - input_path: プロジェクトフォルダ / CSVフォルダ / .ipro
+    - input_path: プロジェクトフォルダ / CSVフォルダ / .ipro / .cgn
     - config_file: 設定CSVファイルのパス
     - output_dir: Excel出力先フォルダ
     - excel_filename: 出力ファイル名
@@ -119,8 +119,8 @@ def _extract_input_to_temp(
 
     warn = on_swap_warning or _default_warn
     if input_path.is_file():
-        if input_path.suffix.lower() != ".ipro":
-            raise ValueError("入力にはプロジェクトフォルダ、CSVフォルダ、または .ipro を指定してください。")
+        if input_path.suffix.lower() not in {".ipro", ".cgn"}:
+            raise ValueError("入力にはプロジェクトフォルダ、CSVフォルダ、.ipro、または .cgn を指定してください。")
         data_source = DataSource.from_input(input_path)
         try:
             value_cols = ["watersurfaceelevation(m)", "elevation(m)"]
@@ -175,7 +175,7 @@ def main():
         "-i", "--input-dir",
         type=Path,
         required=True,
-        help="プロジェクトフォルダ / CSVフォルダ / .ipro"
+        help="プロジェクトフォルダ / CSVフォルダ / .ipro / .cgn"
     )
     parser.add_argument(
         "-f", "--config-file",
@@ -206,10 +206,10 @@ def main():
 
     # 存在チェック
     in_path = args.input_dir
-    in_ok = in_path.is_dir() or (in_path.is_file() and in_path.suffix.lower() == ".ipro")
+    in_ok = in_path.is_dir() or (in_path.is_file() and in_path.suffix.lower() in {".ipro", ".cgn"})
     if not in_ok:
         logger.error(f"入力パスが無効: {in_path}")
-        print(f"エラー: 入力が無効です（プロジェクトフォルダ/CSVフォルダ/.ipro）: {in_path}")
+        print(f"エラー: 入力が無効です（プロジェクトフォルダ/CSVフォルダ/.ipro/.cgn）: {in_path}")
         sys.exit(1)
     if not args.config_file.is_file():
         logger.error(f"設定ファイルが無効: {args.config_file}")

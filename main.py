@@ -41,6 +41,15 @@ def _splash_worker(done: MpEvent, splash_path: Path) -> None:
     y = (splash.winfo_screenheight() - height) // 2
     splash.geometry(f"{width}x{height}+{x}+{y}")
     splash.deiconify()
+    # Keep splash above for initial draw only, then release topmost.
+    def _release_topmost() -> None:
+        try:
+            if splash.winfo_exists():
+                splash.attributes("-topmost", False)
+        except Exception:
+            pass
+
+    root.after(500, _release_topmost)
 
     def _poll() -> None:
         if done.is_set():
@@ -62,10 +71,14 @@ def _resolve_splash_path() -> Path:
 
 def main() -> None:
     mp.freeze_support()
-    from iRIC_DataScope.app import main as app_main
 
     if getattr(sys, "frozen", False):
-        app_main(show_splash=False)
+        from iRIC_DataScope.app import main as app_main
+        # PyInstaller provides sys._MEIPASS and pyi_splash; Nuitka does not.
+        if getattr(sys, "_MEIPASS", None):
+            app_main(show_splash=False)
+        else:
+            app_main(show_splash=True)
         return
 
     done = mp.Event()
@@ -76,6 +89,7 @@ def main() -> None:
         daemon=True,
     )
     splash_proc.start()
+    from iRIC_DataScope.app import main as app_main
 
     def _close_splash() -> None:
         if not done.is_set():

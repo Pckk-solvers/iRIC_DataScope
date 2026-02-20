@@ -38,6 +38,7 @@ splash = Splash(
     SPLASH_PATH,
     binaries=a.binaries,
     datas=a.datas,
+    always_on_top=False,
     # text_pos=(10, 50),  # onefile解凍中のテキスト出したいなら
 )
 

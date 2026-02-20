@@ -199,12 +199,12 @@ class LrWseGUI(tk.Toplevel):
             cfg = self.config_file
             logger.debug(f"入力フォルダ: {in_dir}, 出力フォルダ: {out_dir}, 設定ファイル: {cfg}")
             
-            in_ok = in_dir.is_dir() or (in_dir.is_file() and in_dir.suffix.lower() == ".ipro")
+            in_ok = in_dir.is_dir() or (in_dir.is_file() and in_dir.suffix.lower() in {".ipro", ".cgn"})
             if not (in_ok and out_dir.is_dir() and cfg and cfg.is_file()):
                 logger.error("入力フォルダ、設定ファイル、出力フォルダのいずれかが無効です")
                 messagebox.showerror(
                     "エラー",
-                    "入力（プロジェクトフォルダ/CSVフォルダ/.ipro）、設定ファイル、出力フォルダを正しく指定してください。",
+                    "入力（プロジェクトフォルダ/CSVフォルダ/.ipro/.cgn）、設定ファイル、出力フォルダを正しく指定してください。",
                 )
                 return
             

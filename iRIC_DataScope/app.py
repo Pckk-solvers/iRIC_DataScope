@@ -147,12 +147,31 @@ class LauncherApp(tk.Tk):
             logger.debug("LauncherApp: Failed to %s: %s", context, exc)
 
     def _resource_path(self, relative_path: Path) -> Path:
+        # Support both PyInstaller (sys._MEIPASS) and Nuitka (no _MEIPASS).
+        rel = relative_path
+        rel_stripped = (
+            Path(*relative_path.parts[1:]) if relative_path.parts[:1] == ("iRIC_DataScope",) else relative_path
+        )
+        bases: list[Path] = []
         if getattr(sys, "frozen", False):
-            base = Path(getattr(sys, "_MEIPASS", Path.cwd()))
-            return base / relative_path
-        if relative_path.parts and relative_path.parts[0] == "iRIC_DataScope":
-            relative_path = Path(*relative_path.parts[1:])
-        return _APP_DIR / relative_path
+            meipass = getattr(sys, "_MEIPASS", None)
+            if meipass:
+                bases.append(Path(meipass))
+            exe = getattr(sys, "executable", None)
+            if exe:
+                bases.append(Path(exe).resolve().parent)
+            bases.append(Path.cwd())
+        else:
+            bases.append(_APP_DIR)
+
+        for base in bases:
+            for rp in (rel, rel_stripped):
+                candidate = base / rp
+                if candidate.is_file():
+                    return candidate
+
+        # Fallback for dev mode
+        return _APP_DIR / rel_stripped
 
     def _show_splash(self) -> None:
         splash_path = self._resource_path(SPLASH_REL_PATH)
@@ -187,6 +206,14 @@ class LauncherApp(tk.Tk):
 
         splash.deiconify()  # ★位置が決まってから表示
         splash.lift()
+        # 初期表示後は最前面を解除して他ウィンドウ操作を邪魔しない。
+        def _release_topmost() -> None:
+            try:
+                if splash.winfo_exists():
+                    splash.attributes("-topmost", False)
+            except Exception:
+                pass
+        splash.after(500, _release_topmost)
 
         self._splash = splash
         self._splash_image = image  # keep reference
@@ -404,7 +431,7 @@ class LauncherApp(tk.Tk):
         )
 
     def _launch_xy_value_map(self, master: tk.Misc, *, input_path: Path, output_dir: Path):
-        """X-Y分布画像出力ツールを開く（プロジェクト/CSVフォルダ/.ipro を直接読み込む）"""
+        """X-Y分布画像出力ツールを開く（プロジェクト/CSVフォルダ/.ipro/.cgn を直接読み込む）"""
         return self._safe_open_tool(
             lambda: launch_xy_value_map(master, input_path=input_path, output_dir=output_dir),
             "XYValueMapGUI",
