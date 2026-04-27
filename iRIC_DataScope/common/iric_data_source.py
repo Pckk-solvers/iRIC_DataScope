@@ -16,6 +16,7 @@ from iRIC_DataScope.common.iric_project import (
     discover_project_cgns,
     list_solution_cgns_in_dir,
     list_solution_cgns_in_ipro,
+    normalize_project_input_path,
     parse_solution_step,
 )
 
@@ -152,7 +153,7 @@ class DataSource:
         *,
         grid_location: Literal["node", "cell"] = "node",
     ) -> "DataSource":
-        p = Path(input_path)
+        p = normalize_project_input_path(Path(input_path))
         if p.is_dir():
             kind = classify_input_dir(p)
             if kind == "csv_dir":

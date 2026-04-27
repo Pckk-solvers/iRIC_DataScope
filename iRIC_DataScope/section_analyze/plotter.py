@@ -89,9 +89,10 @@ def _render_section_graph(
         peak = valid.sort_values(["mean_wse", "time"], ascending=[False, True]).iloc[0]
         peak_time = float(peak["time"])
         peak_value = float(peak["mean_wse"])
+        peak_time_label = int(round(peak_time))
         ax.scatter([peak_time], [peak_value], s=36, color=LINE_COLOR, edgecolors="white", linewidths=0.8, zorder=3)
         ax.annotate(
-            f"最大 {peak_value:.2f}",
+            f"最大 {peak_value:.2f} (t={peak_time_label})",
             xy=(peak_time, peak_value),
             xytext=(10, 10),
             textcoords="offset points",

@@ -17,7 +17,7 @@ from typing import Callable, Optional, Union
 import pandas as pd
 
 from iRIC_DataScope.common.iric_data_source import DataSource
-from iRIC_DataScope.common.iric_project import classify_input_dir
+from iRIC_DataScope.common.iric_project import classify_input_dir, normalize_project_input_path
 from .config import load_setting
 from .extractor import extract_all, extract_all_from_frames
 from .writer import combine_to_excel
@@ -113,6 +113,8 @@ def _extract_input_to_temp(
     on_swap_warning: Callable[[str], None] | None = None,
     min_depth: Optional[float] = None,
 ) -> None:
+    input_path = normalize_project_input_path(input_path)
+
     def _default_warn(message: str) -> None:
         logger.warning(message)
         print(message)
@@ -205,7 +207,7 @@ def main():
     logger.debug(f"CLI引数: {args}")
 
     # 存在チェック
-    in_path = args.input_dir
+    in_path = normalize_project_input_path(args.input_dir)
     in_ok = in_path.is_dir() or (in_path.is_file() and in_path.suffix.lower() in {".ipro", ".cgn"})
     if not in_ok:
         logger.error(f"入力パスが無効: {in_path}")

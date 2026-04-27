@@ -136,11 +136,12 @@ def convert_iric_project(
     from .iric_project import (
         discover_project_cgns,
         list_solution_cgns_in_ipro,
+        normalize_project_input_path,
         parse_solution_step,
     )
 
     opts = options or ConversionOptions()
-    input_path = input_path.expanduser()
+    input_path = normalize_project_input_path(input_path.expanduser())
     output_dir = output_dir.expanduser()
 
     logger.info("Start Project→CSV: input=%s output=%s", input_path, output_dir)

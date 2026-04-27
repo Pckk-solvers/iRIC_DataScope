@@ -12,7 +12,7 @@ import tkinter as tk
 from tkinter import ttk
 import webbrowser
 import time
-from importlib import metadata
+from iRIC_DataScope._version import __version__
 
 from iRIC_DataScope.common.io_selector import IOFolderSelector
 from iRIC_DataScope.common.iric_project import (
@@ -22,6 +22,7 @@ from iRIC_DataScope.common.iric_project import (
     is_valid_input_path,
     list_solution_cgns_in_dir,
     list_solution_cgns_in_ipro,
+    normalize_project_input_path,
 )
 from iRIC_DataScope.common.logging_config import setup_logging
 from iRIC_DataScope.lr_wse.launcher import launch_from_launcher as launch_lr_wse
@@ -81,10 +82,7 @@ class InputSummary:
 
 
 def get_app_version() -> str:
-    try:
-        return metadata.version("iric-datascope")
-    except metadata.PackageNotFoundError:
-        return "dev"
+    return __version__
 
 
 def summarize_input_path(input_path: Path | None) -> InputSummary:
@@ -102,6 +100,8 @@ def summarize_input_path(input_path: Path | None) -> InputSummary:
             details=(str(input_path),),
         )
 
+    input_path = normalize_project_input_path(input_path)
+
     if input_path.is_file():
         suffix = input_path.suffix.lower()
         if suffix == ".ipro":
@@ -115,7 +115,7 @@ def summarize_input_path(input_path: Path | None) -> InputSummary:
         return InputSummary(
             label="未対応ファイル",
             valid=False,
-            details=(f"対応形式は .ipro / .cgn です: {input_path.name}",),
+            details=(f"対応形式は .ipro / .cgn / project.xml です: {input_path.name}",),
         )
 
     try:
@@ -132,7 +132,7 @@ def summarize_input_path(input_path: Path | None) -> InputSummary:
         solutions = list_solution_cgns_in_dir(input_path)
         details = [
             "プロジェクトフォルダ",
-            f"Case1.cgn: {'あり' if case else 'なし'}",
+            f"基準CGNS: {'あり' if case else 'なし'}",
             f"Solution*.cgn: {len(solutions)} 件",
         ]
         warnings = ()
@@ -332,33 +332,42 @@ class LauncherApp(tk.Tk):
     def _configure_styles(self) -> None:
         self.configure(bg="#f6f8fb")
         style = ttk.Style(self)
-        style.configure("Header.TFrame", background="#f6f8fb")
-        style.configure("Title.TLabel", background="#f6f8fb", font=("TkDefaultFont", 14, "bold"))
-        style.configure("Subtitle.TLabel", background="#f6f8fb", foreground="#4b5563")
+        # --- Launcher (LA.*) styles ---
+        style.configure("LA.Header.TFrame", background="#f6f8fb")
+        style.configure("LA.Title.TLabel", background="#f6f8fb", font=("TkDefaultFont", 14, "bold"))
+        style.configure("LA.Version.TLabel", background="#f6f8fb", foreground="#9ca3af", font=("TkDefaultFont", 9))
+        style.configure("LA.Subtitle.TLabel", background="#f6f8fb", foreground="#4b5563")
+        style.configure("LA.Muted.TLabel", foreground="#6b7280")
+        style.configure("LA.Ok.TLabel", foreground="#047857")
+        style.configure("LA.Warn.TLabel", foreground="#b45309")
+        style.configure("LA.Error.TLabel", foreground="#b91c1c")
+        style.configure("LA.Section.TLabelframe", padding=10)
+        style.configure("LA.Section.TLabelframe.Label", font=("TkDefaultFont", 10, "bold"))
+        style.configure("LA.Card.TLabelframe", padding=10)
+        style.configure("LA.Card.TLabelframe.Label", font=("TkDefaultFont", 10, "bold"))
+        style.configure("LA.CardDesc.TLabel", foreground="#374151")
+        style.configure("LA.CardOutput.TLabel", foreground="#6b7280", font=("TkDefaultFont", 9))
+        style.configure("LA.CardStatus.TLabel", foreground="#6b7280", font=("TkDefaultFont", 9))
+        style.configure("LA.StatusBar.TLabel", foreground="#6b7280", font=("TkDefaultFont", 9))
+        style.configure("LA.InputKind.TLabel", font=("TkDefaultFont", 9, "bold"))
+        # Keep backward-compatible names for any downstream references
         style.configure("Muted.TLabel", foreground="#6b7280")
-        style.configure("Ok.TLabel", foreground="#047857")
         style.configure("Warn.TLabel", foreground="#b45309")
+        style.configure("Ok.TLabel", foreground="#047857")
         style.configure("Error.TLabel", foreground="#b91c1c")
-        style.configure("Tool.TLabelframe", padding=8)
-        style.configure("Tool.TLabelframe.Label", font=("TkDefaultFont", 10, "bold"))
 
     def _finalize_layout(self):
         """
-        ウィジェット配置後に必要最小サイズを計算し、
-        初期ジオメトリと最小サイズとして設定する
+        ウィジェット配置後にウィンドウサイズを安定化する。
+        reqwidth/reqheight をベースに最低保証サイズを設定。
         """
         logger.debug("LauncherApp: Finalizing layout")
-        # 全配置が終わるまで待ってサイズ計算
         self.update_idletasks()
-        # 必要最小幅・高さを取得
-        w = self.winfo_reqwidth()
-        h = self.winfo_reqheight()
-
-        # 余白として左右 20px、上下 20px を追加
-        margin_x, margin_y = 20, 20
-        self.minsize(w+margin_x, h+margin_y)
-        self._center_window(w + margin_x, h + margin_y)
-        logger.debug(f"LauncherApp: Geometry set to {w+margin_x}x{h+margin_y}")
+        w = max(self.winfo_reqwidth() + 20, 780)
+        h = max(self.winfo_reqheight() + 20, 560)
+        self.minsize(780, 560)
+        self._center_window(w, h)
+        logger.debug(f"LauncherApp: Geometry set to {w}x{h}")
 
     def _center_window(self, width: int, height: int) -> None:
         if width <= 0 or height <= 0:
@@ -384,88 +393,119 @@ class LauncherApp(tk.Tk):
         logger.debug("LauncherApp: Menu bar created")
 
     def _create_header(self) -> None:
-        frame = ttk.Frame(self, style="Header.TFrame", padding=(14, 12, 14, 4))
+        frame = ttk.Frame(self, style="LA.Header.TFrame", padding=(14, 10, 14, 2))
         frame.pack(fill="x")
-        ttk.Label(frame, text="iRIC_DataScope", style="Title.TLabel").grid(row=0, column=0, sticky="w")
+        frame.columnconfigure(0, weight=1)
+        # Title row
+        title_row = ttk.Frame(frame, style="LA.Header.TFrame")
+        title_row.grid(row=0, column=0, sticky="ew")
+        title_row.columnconfigure(0, weight=1)
+        ttk.Label(title_row, text="iRIC_DataScope", style="LA.Title.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(title_row, text=f"v{get_app_version()}", style="LA.Version.TLabel").grid(row=0, column=1, sticky="e")
+        # Subtitle + summary
         ttk.Label(
-            frame,
-            text=f"{APP_TITLE} / v{get_app_version()}",
-            style="Subtitle.TLabel",
+            frame, text=APP_TITLE, style="LA.Subtitle.TLabel",
         ).grid(row=1, column=0, sticky="w", pady=(2, 0))
         self._header_summary_var = tk.StringVar(value="入力未選択")
-        ttk.Label(frame, textvariable=self._header_summary_var, style="Muted.TLabel").grid(row=0, column=1, sticky="e")
-        frame.columnconfigure(0, weight=1)
+        ttk.Label(frame, textvariable=self._header_summary_var, style="LA.Muted.TLabel").grid(row=1, column=0, sticky="e", pady=(2, 0))
 
     def _create_io_panel(self):
-        """入力／出力フォルダ選択用パネルを配置"""
+        """入力／出力フォルダ選択 + 最近のパス + 入力診断を統合パネルとして配置"""
         logger.debug("LauncherApp: Creating IO folder selector panel")
-        container = ttk.LabelFrame(self, text="入力 / 出力", padding=8)
-        container.pack(fill="x", padx=12, pady=(8, 6))
+        container = ttk.LabelFrame(self, text="入力 / 出力", style="LA.Section.TLabelframe")
+        container.pack(fill="x", padx=12, pady=(6, 4))
+        # IO selectors
         self.io_panel = IOFolderSelector(container)
         self.io_panel.pack(fill="x")
         ttk.Label(
             container,
-            text="入力は iRIC のプロジェクトフォルダ、.ipro、.cgn、または Result_*.csv を含む CSV フォルダを指定してください。",
-            style="Muted.TLabel",
-            wraplength=760,
-        ).pack(fill="x", padx=(112, 0), pady=(2, 0))
-        logger.debug("LauncherApp: IO panel created")
-
-    def _create_recent_panel(self) -> None:
+            text="プロジェクトフォルダ / .ipro / .cgn / project.xml / Result_*.csv フォルダを入力に指定できます。",
+            style="LA.Muted.TLabel",
+            wraplength=720,
+        ).pack(fill="x", padx=(112, 0), pady=(0, 4))
+        # Recent paths (統一グリッドの row=2 として追加)
         self._recent_items = self._load_recent_items()
-        frame = ttk.Frame(self, padding=(12, 0, 12, 6))
-        frame.pack(fill="x")
-        ttk.Label(frame, text="最近使ったパス").grid(row=0, column=0, sticky="w", padx=(0, 6))
-        self._recent_var = tk.StringVar()
-        self._recent_combo = ttk.Combobox(frame, textvariable=self._recent_var, state="readonly", width=80)
-        self._recent_combo.grid(row=0, column=1, sticky="ew", padx=(0, 6))
-        ttk.Button(frame, text="復元", command=self._apply_recent_selection).grid(row=0, column=2)
-        frame.columnconfigure(1, weight=1)
+        self._recent_var, self._recent_combo = self.io_panel.add_recent_row(style="LA.Muted.TLabel")
+        self._recent_combo.bind("<<ComboboxSelected>>", lambda _: self._apply_recent_selection())
+        self.io_panel.get_recent_button().configure(command=self._apply_recent_selection)
         self._refresh_recent_options()
-
-    def _create_input_summary_panel(self) -> None:
-        frame = ttk.LabelFrame(self, text="入力診断", padding=8)
-        frame.pack(fill="x", padx=12, pady=(0, 8))
+        # Inline input summary (replaces old separate LabelFrame)
+        ttk.Separator(container).pack(fill="x", pady=(6, 4))
+        summary_row = ttk.Frame(container)
+        summary_row.pack(fill="x")
+        summary_row.columnconfigure(0, weight=1)
         self._input_kind_var = tk.StringVar(value="入力未選択")
         self._input_detail_var = tk.StringVar(value="入力パスを選択してください。")
         self._input_warning_var = tk.StringVar(value="")
         self._output_status_var = tk.StringVar(value="出力フォルダ未選択")
-        ttk.Label(frame, textvariable=self._input_kind_var, font=("TkDefaultFont", 10, "bold")).grid(row=0, column=0, sticky="w")
-        ttk.Label(frame, textvariable=self._output_status_var, style="Muted.TLabel").grid(row=0, column=1, sticky="e")
-        ttk.Label(frame, textvariable=self._input_detail_var, style="Muted.TLabel").grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 0))
-        ttk.Label(frame, textvariable=self._input_warning_var, style="Warn.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 0))
-        frame.columnconfigure(0, weight=1)
+        ttk.Label(summary_row, textvariable=self._input_kind_var, style="LA.InputKind.TLabel").grid(row=0, column=0, sticky="w")
+        ttk.Label(summary_row, textvariable=self._output_status_var, style="LA.Muted.TLabel").grid(row=0, column=1, sticky="e")
+        ttk.Label(summary_row, textvariable=self._input_detail_var, style="LA.Muted.TLabel").grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        ttk.Label(summary_row, textvariable=self._input_warning_var, style="LA.Warn.TLabel").grid(row=2, column=0, columnspan=2, sticky="w", pady=(2, 0))
+        logger.debug("LauncherApp: IO panel created")
+
+    def _create_recent_panel(self) -> None:
+        """No-op: recent panel is now integrated into _create_io_panel."""
+        pass
+
+    def _create_input_summary_panel(self) -> None:
+        """No-op: input summary is now integrated into _create_io_panel."""
+        pass
 
     def _create_launch_buttons(self):
-        """各機能の起動カードを配置"""
+        """各機能の起動カードを配置（3列・左詰め）"""
         logger.debug("LauncherApp: Creating launch buttons")
         self._tool_specs = self._build_tool_specs()
         self._tool_buttons = []
         self._tool_status_vars = {}
-        grid = ttk.Frame(self, padding=(12, 0, 12, 8))
+        grid = ttk.Frame(self, padding=(12, 4, 12, 8))
         grid.pack(fill="both", expand=True)
+        n_cols = 3
         for idx, spec in enumerate(self._tool_specs):
-            card = ttk.LabelFrame(grid, text=spec.label, style="Tool.TLabelframe")
-            row, col = divmod(idx, 2)
-            card.grid(row=row, column=col, sticky="nsew", padx=5, pady=5)
-            ttk.Label(card, text=spec.description, wraplength=280).grid(row=0, column=0, sticky="w")
-            ttk.Label(card, text=f"出力: {spec.output_hint}", style="Muted.TLabel").grid(row=1, column=0, columnspan=2, sticky="w", pady=(4, 8))
-            status_var = tk.StringVar(value="入力と出力を選択してください")
-            ttk.Label(card, textvariable=status_var, style="Muted.TLabel").grid(row=2, column=0, sticky="w")
-            btn = ttk.Button(card, text="開始", command=lambda s=spec: self._open_tool(s), state="disabled")
-            btn.grid(row=2, column=1, sticky="e")
-            ttk.Button(card, text="?", width=3, command=lambda s=spec: self._open_tool_docs(s)).grid(row=0, column=1, sticky="ne")
+            card = ttk.LabelFrame(grid, text=spec.label, style="LA.Card.TLabelframe")
+            row, col = divmod(idx, n_cols)
+            card.grid(row=row, column=col, sticky="nsew", padx=4, pady=4)
             card.columnconfigure(0, weight=1)
+            # Description
+            ttk.Label(
+                card, text=spec.description, wraplength=220, style="LA.CardDesc.TLabel",
+            ).grid(row=0, column=0, sticky="w")
+            # Help button (small, right-aligned)
+            ttk.Button(
+                card, text="?", width=3,
+                command=lambda s=spec: self._open_tool_docs(s),
+            ).grid(row=0, column=1, sticky="ne")
+            # Output hint
+            ttk.Label(
+                card, text=f"出力: {spec.output_hint}", style="LA.CardOutput.TLabel",
+            ).grid(row=1, column=0, columnspan=2, sticky="w", pady=(2, 6))
+            # Status + launch button row
+            status_var = tk.StringVar(value="入力と出力を選択してください")
+            ttk.Label(
+                card, textvariable=status_var, style="LA.CardStatus.TLabel",
+            ).grid(row=2, column=0, sticky="w")
+            btn = ttk.Button(
+                card, text="開始",
+                command=lambda s=spec: self._open_tool(s),
+                state="disabled",
+            )
+            btn.grid(row=2, column=1, sticky="e")
             setattr(self, spec.button_attr, btn)
             self._tool_buttons.append(btn)
             self._tool_status_vars[spec.key] = status_var
-        grid.columnconfigure(0, weight=1, uniform="tools")
-        grid.columnconfigure(1, weight=1, uniform="tools")
+        # Configure all 3 columns as uniform
+        for c in range(n_cols):
+            grid.columnconfigure(c, weight=1, uniform="tools")
         logger.debug("LauncherApp: Launch buttons created")
 
     def _create_status_bar(self) -> None:
         self._status_var = tk.StringVar(value="準備中")
-        ttk.Label(self, textvariable=self._status_var, anchor="w", padding=(12, 4), style="Muted.TLabel").pack(fill="x")
+        bar = ttk.Frame(self, padding=(12, 0, 12, 6))
+        bar.pack(fill="x")
+        bar.columnconfigure(0, weight=1)
+        ttk.Separator(bar).grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 4))
+        ttk.Label(bar, textvariable=self._status_var, style="LA.StatusBar.TLabel", anchor="w").grid(row=1, column=0, sticky="w")
+        ttk.Label(bar, text=f"v{get_app_version()}", style="LA.StatusBar.TLabel", anchor="e").grid(row=1, column=1, sticky="e")
 
     def _bind_events(self):
         """入力/出力パス検証と Alt+H ショートカットをバインド"""
@@ -586,8 +626,8 @@ class LauncherApp(tk.Tk):
             ToolSpec(
                 key="section_analyze",
                 label=BUTTON_LABELS["section_analyze"],
-                description="側線SHPに沿って水位・水深を断面別に集計します。",
-                output_hint="断面時系列 CSV / ピーク CSV",
+                description="側線SHPに沿って水位・水深を断面別に集計し、グラフを出力します。",
+                output_hint="断面時系列 CSV / ピーク CSV / 断面グラフ PNG",
                 docs_path="dev_docs/section_analyze/requirements/",
                 button_attr="btn_section_analyze",
                 window_attr="_section_analyze_win",

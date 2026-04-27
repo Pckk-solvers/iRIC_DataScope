@@ -44,3 +44,23 @@ def test_summarize_ipro_file(tmp_path) -> None:
     assert summary.label == "iRIC プロジェクト"
     assert summary.valid
     assert "Solution*.cgn: 1 件" in summary.details
+
+
+def test_summarize_project_xml_file(tmp_path) -> None:
+    (tmp_path / "project.xml").write_text(
+        (
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<iRICProject separateResult="false">\n'
+            '  <CgnsFileList current="CaseA">\n'
+            '    <CgnsFileEntry filename="CaseA" />\n'
+            "  </CgnsFileList>\n"
+            "</iRICProject>\n"
+        ),
+        encoding="utf-8",
+    )
+    (tmp_path / "CaseA.cgn").write_bytes(b"dummy")
+
+    summary = summarize_input_path(tmp_path / "project.xml")
+
+    assert summary.label == "プロジェクトフォルダ"
+    assert summary.valid

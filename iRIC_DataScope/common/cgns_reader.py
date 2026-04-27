@@ -14,6 +14,8 @@ import h5py
 import numpy as np
 import pandas as pd
 
+from iRIC_DataScope.common.iric_project import normalize_project_input_path
+
 logger = logging.getLogger(__name__)
 
 # CGNS/HDF5 ではノード直下の " data" に実配列が格納されていることが多い
@@ -245,9 +247,10 @@ def resolve_case_cgn(input_path: Path, case_name: str) -> Generator[Path, None, 
     input_path:
       - *.cgn: そのまま
       - *.ipro: zip から case_name を一時展開
+      - project.xml: 親フォルダをプロジェクト入力として扱う
       - dir: dir 配下から case_name を探す。無ければ *.cgn が1個ならそれ。
     """
-    p = input_path
+    p = normalize_project_input_path(input_path)
 
     if p.is_dir():
         hit = list(p.rglob(case_name))
