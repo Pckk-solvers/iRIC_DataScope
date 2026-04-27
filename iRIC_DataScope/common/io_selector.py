@@ -5,20 +5,19 @@
 import tkinter as tk
 from tkinter import ttk, filedialog
 from pathlib import Path
-from .path_selector import PathSelector
 
 
 class ProjectPathSelector(ttk.Frame):
     """
     入力: プロジェクトフォルダ / CSVフォルダ / .ipro / .cgn を選択できるセレクタ。
     """
-    def __init__(self, master, label: str = "入力パス:", **kwargs):
+    def __init__(self, master, label: str = "入力パス:", label_width: int = 14, **kwargs):
         super().__init__(master, **kwargs)
         self.var = tk.StringVar()
-        ttk.Label(self, text=label).grid(row=0, column=0, sticky="w", padx=5, pady=5)
-        ttk.Entry(self, textvariable=self.var, width=40).grid(row=0, column=1, sticky="ew", padx=5, pady=5)
-        ttk.Button(self, text="フォルダ", command=self._select_dir).grid(row=0, column=2, padx=2)
-        ttk.Button(self, text="ファイル", command=self._select_file).grid(row=0, column=3, padx=2)
+        ttk.Label(self, text=label, width=label_width, anchor="e").grid(row=0, column=0, sticky="e", padx=(0, 8), pady=4)
+        ttk.Entry(self, textvariable=self.var, width=56).grid(row=0, column=1, sticky="ew", padx=(0, 8), pady=4)
+        ttk.Button(self, text="フォルダ", width=8, command=self._select_dir).grid(row=0, column=2, padx=(0, 4), pady=4)
+        ttk.Button(self, text="ファイル", width=8, command=self._select_file).grid(row=0, column=3, pady=4)
         self.columnconfigure(1, weight=1)
 
     def _select_dir(self):
@@ -43,6 +42,28 @@ class ProjectPathSelector(ttk.Frame):
         return Path(self.var.get())
 
 
+class OutputFolderSelector(ttk.Frame):
+    """出力フォルダを選択するセレクタ。入力行と同じ列幅で配置する。"""
+
+    def __init__(self, master, label: str = "出力フォルダ:", label_width: int = 14, **kwargs):
+        super().__init__(master, **kwargs)
+        self.var = tk.StringVar()
+        ttk.Label(self, text=label, width=label_width, anchor="e").grid(row=0, column=0, sticky="e", padx=(0, 8), pady=4)
+        ttk.Entry(self, textvariable=self.var, width=56).grid(row=0, column=1, sticky="ew", padx=(0, 8), pady=4)
+        ttk.Button(self, text="参照", width=8, command=self._select_dir).grid(row=0, column=2, padx=(0, 4), pady=4)
+        ttk.Label(self, text="", width=8).grid(row=0, column=3, pady=4)
+        self.columnconfigure(1, weight=1)
+
+    def _select_dir(self):
+        path = filedialog.askdirectory(title="出力フォルダを選択")
+        if path:
+            self.var.set(path)
+
+    def get_path(self) -> Path:
+        """現在の出力フォルダを Path で返す。"""
+        return Path(self.var.get())
+
+
 class IOFolderSelector(ttk.Frame):
     """
     入力（プロジェクトフォルダ/CSVフォルダ/.ipro/.cgn）と出力フォルダを一度に選択・取得できるウィジェット。
@@ -55,10 +76,10 @@ class IOFolderSelector(ttk.Frame):
         super().__init__(master, **kwargs)
         # 入力（プロジェクトフォルダ/CSVフォルダ/.ipro/.cgn）
         self.input_selector = ProjectPathSelector(self, label="入力パス:")
-        self.input_selector.grid(row=0, column=0, sticky="ew", padx=5, pady=5)
+        self.input_selector.grid(row=0, column=0, sticky="ew")
         # 出力フォルダ
-        self.output_selector = PathSelector(self, label="出力フォルダ:", mode="directory")
-        self.output_selector.grid(row=1, column=0, sticky="ew", padx=5, pady=5)
+        self.output_selector = OutputFolderSelector(self, label="出力フォルダ:")
+        self.output_selector.grid(row=1, column=0, sticky="ew")
         self.columnconfigure(0, weight=1)
 
     def get_input_dir(self) -> Path:

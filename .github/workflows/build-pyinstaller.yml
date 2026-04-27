@@ -35,6 +35,8 @@ jobs:
           "IRIC_DATASCOPE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "ARCHIVE_NAME=iRIC_DataScope-$tag-windows-x64.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "DOCS_ARCHIVE_NAME=iRIC_DataScope-$tag-docs.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_NOTES_PATH=docs/release_notes/$tag.md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "RELEASE_BODY_PATH=release/release-body.md" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Sync dependencies for build
         run: uv sync --frozen --group build --group dev
@@ -57,6 +59,29 @@ jobs:
           New-Item -ItemType Directory -Path release -Force | Out-Null
           Compress-Archive -Path "dist\*" -DestinationPath "release\$env:ARCHIVE_NAME" -Force
 
+      - name: Prepare release notes
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if (-not (Test-Path $env:RELEASE_NOTES_PATH)) {
+            throw "Release notes file not found: $env:RELEASE_NOTES_PATH"
+          }
+
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Get-Content $env:RELEASE_NOTES_PATH -Raw | Out-File -FilePath $env:RELEASE_BODY_PATH -Encoding utf8
+          "" | Out-File -FilePath $env:RELEASE_BODY_PATH -Encoding utf8 -Append
+          "## GitHub generated release notes" | Out-File -FilePath $env:RELEASE_BODY_PATH -Encoding utf8 -Append
+          "" | Out-File -FilePath $env:RELEASE_BODY_PATH -Encoding utf8 -Append
+          gh api "repos/${{ github.repository }}/releases/generate-notes" `
+            -f "tag_name=${{ github.ref_name }}" `
+            --jq ".body" | Out-File -FilePath $env:RELEASE_BODY_PATH -Encoding utf8 -Append
+          "" | Out-File -FilePath $env:RELEASE_BODY_PATH -Encoding utf8 -Append
+          "## Included artifacts" | Out-File -FilePath $env:RELEASE_BODY_PATH -Encoding utf8 -Append
+          "" | Out-File -FilePath $env:RELEASE_BODY_PATH -Encoding utf8 -Append
+          "- ``$env:ARCHIVE_NAME``" | Out-File -FilePath $env:RELEASE_BODY_PATH -Encoding utf8 -Append
+          "- ``$env:DOCS_ARCHIVE_NAME``" | Out-File -FilePath $env:RELEASE_BODY_PATH -Encoding utf8 -Append
+
       - name: Upload build artifact
         uses: actions/upload-artifact@v4
         with:
@@ -74,13 +99,7 @@ jobs:
         with:
           tag_name: ${{ github.ref_name }}
           prerelease: true
-          generate_release_notes: true
-          body: |
-            Automated pre-release from tag `${{ github.ref_name }}`.
-
-            Included artifact:
-            - `${{ env.ARCHIVE_NAME }}`
-            - `${{ env.DOCS_ARCHIVE_NAME }}`
+          body_path: ${{ env.RELEASE_BODY_PATH }}
           files: |
             release/${{ env.ARCHIVE_NAME }}
             release/${{ env.DOCS_ARCHIVE_NAME }}
