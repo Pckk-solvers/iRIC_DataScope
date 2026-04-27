@@ -159,7 +159,7 @@ uv run python -m iRIC_DataScope.section_analyze `
 
 ```text
 --depth-threshold
-  有効点判定に使う水深閾値。既定値 0.01
+  有効点判定に使う水深下限。既定値 0.01
 
 --sample-interval
   側線サンプリング間隔。未指定なら自動推定
@@ -178,6 +178,9 @@ uv run python -m iRIC_DataScope.section_analyze `
 
 --limit-steps
   開発確認用。先頭Nステップだけ処理する
+
+--column-names
+  CSV列名を切り替える。standard は内部向け英語名、river は河川業務向け日本語名
 ```
 
 ### 4.3 CLIの終了コード
@@ -298,6 +301,7 @@ section_name_field: str | None
 overwrite: bool
 limit_steps: int | None
 dry_run: bool
+column_names: Literal["standard", "river"]
 ```
 
 ### 5.6 cgn_loader.py
@@ -410,6 +414,29 @@ def run_section_analysis(
 CSV出力を担当する。
 
 GUIや processor に `to_csv` の細かい設定を書かない。
+
+CSV列名は `column_names` に応じて writer でだけ変換する。内部処理のDataFrame列名は英語名のまま維持する。
+
+`river` 指定時の主な列名は以下。
+
+```text
+section_id -> 断面ID
+section_name -> 断面名
+source_feature_id -> 側線FID
+line_dist -> 断面距離
+nearest_dist -> 最近傍距離
+step -> ステップ
+time -> 時刻
+node_count -> 採用点数
+valid_node_count -> 有効点数
+depth_threshold -> 有効水深下限
+mean_wse -> 平均水位
+mean_depth -> 平均水深
+peak_step -> 平均水位最大ステップ
+peak_time -> 平均水位最大時刻
+peak_mean_wse -> 最大平均水位
+depth_at_peak_mean_wse -> 最大平均水位時平均水深
+```
 
 ## 6. 集計仕様
 

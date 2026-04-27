@@ -28,6 +28,7 @@ from iRIC_DataScope.lr_wse.launcher import launch_from_launcher as launch_lr_wse
 from iRIC_DataScope.cross_section.launcher import launch_from_launcher as launch_cross_section
 from iRIC_DataScope.time_series.launcher import launch_from_launcher as launch_time_series
 from iRIC_DataScope.xy_value_map.launcher import launch_from_launcher as launch_xy_value_map
+from iRIC_DataScope.section_analyze.launcher import launch_from_launcher as launch_section_analyze
 
 # pyinstallerのスプラッシュを閉じる用
 try:
@@ -53,6 +54,7 @@ BUTTON_LABELS = {
     "cross_section": "横断重ね合わせ図作成",
     "time_series": "時系列データ抽出",
     "xy_value_map": "X-Y分布画像出力",
+    "section_analyze": "断面集計",
 }
 
 
@@ -176,6 +178,7 @@ class LauncherApp(tk.Tk):
         self._cross_section_win = None
         self._time_series_win = None
         self._xy_map_win = None
+        self._section_analyze_win = None
         # Hide splash after the event loop starts so it can be displayed.
         self.after(0, self._finish_startup)
 
@@ -580,6 +583,18 @@ class LauncherApp(tk.Tk):
                 close_binding="destroy",
                 open_fn=self._launch_xy_value_map,
             ),
+            ToolSpec(
+                key="section_analyze",
+                label=BUTTON_LABELS["section_analyze"],
+                description="側線SHPに沿って水位・水深を断面別に集計します。",
+                output_hint="断面時系列 CSV / ピーク CSV",
+                docs_path="dev_docs/section_analyze/requirements/",
+                button_attr="btn_section_analyze",
+                window_attr="_section_analyze_win",
+                log_name="SectionAnalyzeGUI",
+                close_binding="protocol",
+                open_fn=self._launch_section_analyze,
+            ),
         ]
 
     def _open_tool(self, spec: ToolSpec) -> None:
@@ -705,6 +720,13 @@ class LauncherApp(tk.Tk):
         return self._safe_open_tool(
             lambda: launch_xy_value_map(master, input_path=input_path, output_dir=output_dir),
             "XYValueMapGUI",
+        )
+
+    def _launch_section_analyze(self, master: tk.Misc, *, input_path: Path, output_dir: Path):
+        """断面集計ツールを開く"""
+        return self._safe_open_tool(
+            lambda: launch_section_analyze(master, input_path=input_path, output_dir=output_dir),
+            "SectionAnalyzeGUI",
         )
 
     def _safe_open_tool(self, launcher: Callable, log_name: str):
