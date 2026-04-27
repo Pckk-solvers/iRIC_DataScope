@@ -177,7 +177,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
         # Entry-based settings  (label, var, hint)
         entries = [
             ("有効水深下限", self.depth_threshold_var, "depth ≥ この値の点のみ有効"),
-            ("sample_interval", self.sample_interval_var, "空欄 = 自動推定"),
+            ("断面サンプル間隔", self.sample_interval_var, "空欄 = 自動推定"),
             ("断面IDフィールド", self.section_id_field_var, "空欄 = 自動検出"),
             ("断面名フィールド", self.section_name_field_var, "空欄 = 自動検出"),
         ]
@@ -251,7 +251,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
             ("列名", "colname"),
             ("上書き", "overwrite"),
             ("水深下限", "threshold"),
-            ("sample_interval", "interval"),
+            ("断面サンプル間隔", "interval"),
         ]
         for idx, (label, key) in enumerate(preview_items):
             var = tk.StringVar(value="—")
@@ -455,5 +455,15 @@ class SectionAnalyzeGUI(tk.Toplevel):
         self._set_run_button_state(True)
         self._status_var.set(f"完了: {result.mapped_node_count} ノード / {result.step_count} ステップ")
         self._status_detail_var.set(f"出力先: {result.output_dir}")
-        files = "\n".join(str(path) for path in result.output_files)
-        messagebox.showinfo("完了", f"断面集計が完了しました。\n\n{files}", parent=self)
+        csv_files = [path for path in result.output_files if path.suffix.lower() == ".csv"]
+        graph_files = [path for path in result.output_files if path.suffix.lower() == ".png"]
+        lines = ["断面集計が完了しました。", ""]
+        if csv_files:
+            lines.append("CSV:")
+            lines.extend(f"  {path.name}" for path in csv_files)
+        if graph_files:
+            graph_dir = graph_files[0].parent
+            lines.append("")
+            lines.append(f"グラフ: {len(graph_files)} ファイル")
+            lines.append(f"  {graph_dir}")
+        messagebox.showinfo("完了", "\n".join(lines), parent=self)

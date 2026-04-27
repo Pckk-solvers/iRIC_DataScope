@@ -18,6 +18,7 @@ nav:
       - 左右岸水位抽出: user_docs/lr_wse.md
       - 横断重ね合わせ図作成: user_docs/cross_section.md
       - 時系列データ抽出: user_docs/time_series.md
+      - 断面集計: user_docs/section_analyze.md
       - X-Y 分布画像出力: user_docs/xy_value_map.md
   - 開発向け（仕様）:
       - プロジェクト/ipro入力: specs/ipro_cgn_conversion.md
@@ -29,6 +30,7 @@ nav:
   - ビルド/配布:
       - PyInstaller: build_docs/pyinstaller.md
   - リリースノート:
+      - v1.3.0: release_notes/v1.3.0.md
       - v1.2.0: release_notes/v1.2.0.md
       - v1.1.3: release_notes/v1.1.3.md
       - v1.1.2: release_notes/v1.1.2.md

@@ -419,7 +419,10 @@ class LauncherApp(tk.Tk):
         self.io_panel.pack(fill="x")
         ttk.Label(
             container,
-            text="プロジェクトフォルダ / .ipro / .cgn / project.xml / Result_*.csv フォルダを入力に指定できます。",
+            text=(
+                "プロジェクトフォルダ / .ipro / .cgn / project.xml / Result_*.csv フォルダを入力に指定できます。"
+                "出力フォルダは未作成でも実行時に自動作成します。"
+            ),
             style="LA.Muted.TLabel",
             wraplength=720,
         ).pack(fill="x", padx=(112, 0), pady=(0, 4))
@@ -538,7 +541,11 @@ class LauncherApp(tk.Tk):
         return is_valid_input_path(in_path)
 
     def _is_valid_output_path(self, out_path: Path | None) -> bool:
-        return bool(out_path and out_path.is_dir())
+        if not out_path or not str(out_path):
+            return False
+        if out_path.exists():
+            return out_path.is_dir()
+        return True
 
     def _set_tool_buttons_state(self, enabled: bool) -> None:
         state = "normal" if enabled else "disabled"
@@ -563,9 +570,12 @@ class LauncherApp(tk.Tk):
         self._header_summary_var.set(summary.label if in_ok else "入力未完了")
         if out_ok:
             assert out_path is not None
-            self._output_status_var.set(f"出力: {out_path}")
+            if out_path.exists():
+                self._output_status_var.set(f"出力: {out_path}")
+            else:
+                self._output_status_var.set(f"出力: {out_path}（実行時に自動作成）")
         elif out_path and str(out_path):
-            self._output_status_var.set("出力フォルダが見つかりません")
+            self._output_status_var.set("出力パスが不正です（ファイルが存在しています）")
         else:
             self._output_status_var.set("出力フォルダ未選択")
         if in_ok and out_ok:
@@ -628,7 +638,7 @@ class LauncherApp(tk.Tk):
                 label=BUTTON_LABELS["section_analyze"],
                 description="側線SHPに沿って水位・水深を断面別に集計し、グラフを出力します。",
                 output_hint="断面時系列 CSV / ピーク CSV / 断面グラフ PNG",
-                docs_path="dev_docs/section_analyze/requirements/",
+                docs_path="user_docs/section_analyze/",
                 button_attr="btn_section_analyze",
                 window_attr="_section_analyze_win",
                 log_name="SectionAnalyzeGUI",
@@ -640,6 +650,13 @@ class LauncherApp(tk.Tk):
     def _open_tool(self, spec: ToolSpec) -> None:
         out_dir = self.io_panel.get_output_dir()
         in_path = self.io_panel.get_input_dir()
+        try:
+            out_dir.mkdir(parents=True, exist_ok=True)
+        except Exception as exc:
+            logger.warning("LauncherApp: Failed to create output directory: %s", exc)
+            self._status_var.set(f"出力フォルダを作成できません: {out_dir}")
+            self._set_tool_buttons_state(False)
+            return
         logger.info(
             "LauncherApp: Opening %s (in_path=%s, out_dir=%s)",
             spec.log_name,

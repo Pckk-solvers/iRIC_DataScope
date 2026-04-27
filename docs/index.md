@@ -8,6 +8,7 @@
 - [左右岸水位抽出](user_docs/lr_wse.md)
 - [横断重ね合わせ図作成](user_docs/cross_section.md)
 - [時系列データ抽出](user_docs/time_series.md)
+- [断面集計](user_docs/section_analyze.md)
 - [X-Y 分布画像出力](user_docs/xy_value_map.md)
 
 ## 開発向け（仕様）

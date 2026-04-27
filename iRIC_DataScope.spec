@@ -27,6 +27,26 @@ def resolve_version() -> str:
 
 BUILD_VERSION = resolve_version()
 
+# ビルド時に _version.py のフォールバック値を書き換える
+VERSION_FILE = ROOT / "iRIC_DataScope" / "_version.py"
+_version_backup = VERSION_FILE.read_text(encoding="utf-8")
+
+
+def _restore_version_file():
+    VERSION_FILE.write_text(_version_backup, encoding="utf-8")
+
+
+import atexit
+atexit.register(_restore_version_file)
+
+VERSION_FILE.write_text(
+    _version_backup.replace(
+        '_FALLBACK_VERSION = "dev"',
+        f'_FALLBACK_VERSION = "{BUILD_VERSION}"',
+    ),
+    encoding="utf-8",
+)
+
 datas = collect_data_files('matplotlib')
 hiddenimports = [
     'logging.handlers',
