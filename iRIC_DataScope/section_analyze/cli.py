@@ -20,6 +20,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--overwrite", action="store_true", help="既存CSVを上書き")
     parser.add_argument("--dry-run", action="store_true", help="CSVを出力せず概要だけ確認")
     parser.add_argument("--limit-steps", type=int, default=None, help="先頭Nステップだけ処理")
+    parser.add_argument("--shared-y-scale", action="store_true", help="グラフのY軸を全断面で共通化する")
     parser.add_argument(
         "--column-names",
         choices=["standard", "river"],
@@ -61,6 +62,7 @@ def main(argv: list[str] | None = None) -> int:
         limit_steps=args.limit_steps,
         dry_run=args.dry_run,
         column_names=args.column_names,
+        shared_y_scale=args.shared_y_scale,
     )
     try:
         result = run_section_analysis(

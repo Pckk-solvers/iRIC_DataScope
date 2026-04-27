@@ -19,6 +19,7 @@ class SectionAnalyzeOptions:
     limit_steps: int | None = None
     dry_run: bool = False
     column_names: Literal["standard", "river"] = "standard"
+    shared_y_scale: bool = False
 
 
 @dataclass(frozen=True)

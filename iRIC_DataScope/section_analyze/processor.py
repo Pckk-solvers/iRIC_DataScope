@@ -14,6 +14,7 @@ from iRIC_DataScope.section_analyze.models import (
 )
 from iRIC_DataScope.section_analyze.sampler import map_section_nodes
 from iRIC_DataScope.section_analyze.shp_reader import read_section_lines
+from iRIC_DataScope.section_analyze.plotter import write_section_graphs
 from iRIC_DataScope.section_analyze.writer import ensure_output_dir, section_nodes_to_frame, write_outputs
 
 
@@ -141,13 +142,20 @@ def run_section_analysis(
                 timeseries_rows.extend(_calculate_timeseries_rows(frame, nodes_by_section, options))
             timeseries = pd.DataFrame(timeseries_rows)
             peak = _build_peak_summary(timeseries)
-            output_files = write_outputs(
+            graph_files = write_section_graphs(
+                output_dir,
+                timeseries,
+                overwrite=options.overwrite,
+                shared_y_scale=options.shared_y_scale,
+            )
+            csv_files = write_outputs(
                 output_dir,
                 node_map=node_map,
                 timeseries=timeseries,
                 peak=peak,
                 column_names=options.column_names,
             )
+            output_files = csv_files + graph_files
 
         return SectionAnalyzeResult(
             input_path=input_path,

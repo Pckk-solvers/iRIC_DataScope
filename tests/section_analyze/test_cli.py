@@ -74,3 +74,51 @@ def test_cli_river_column_names(tmp_path: Path) -> None:
     header = (output_dir / "section_timeseries.csv").read_text(encoding="utf-8-sig").splitlines()[0]
     assert "断面ID" in header
     assert "平均水位" in header
+
+
+def test_cli_writes_graph_png(tmp_path: Path) -> None:
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    _write_result_csv(input_dir / "Result_0001.csv")
+    output_dir = tmp_path / "out"
+
+    code = main(
+        [
+            "--input",
+            str(input_dir),
+            "--sections",
+            str(FIXTURE),
+            "--output",
+            str(output_dir),
+            "--overwrite",
+        ]
+    )
+
+    assert code == 0
+    graph_dir = output_dir / "section_graphs"
+    png_files = sorted(graph_dir.glob("*.png"))
+    assert png_files
+    assert png_files[0].stat().st_size > 0
+
+
+def test_cli_shared_y_scale_option(tmp_path: Path) -> None:
+    input_dir = tmp_path / "input"
+    input_dir.mkdir()
+    _write_result_csv(input_dir / "Result_0001.csv")
+    output_dir = tmp_path / "out"
+
+    code = main(
+        [
+            "--input",
+            str(input_dir),
+            "--sections",
+            str(FIXTURE),
+            "--output",
+            str(output_dir),
+            "--overwrite",
+            "--shared-y-scale",
+        ]
+    )
+
+    assert code == 0
+    assert (output_dir / "section_graphs").exists()

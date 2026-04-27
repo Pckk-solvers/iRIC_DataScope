@@ -11,6 +11,7 @@ from iRIC_DataScope.section_analyze.models import SectionNode
 NODE_MAP_NAME = "section_node_map.csv"
 TIMESERIES_NAME = "section_timeseries.csv"
 PEAK_NAME = "section_peak_summary.csv"
+GRAPH_DIR_NAME = "section_graphs"
 
 ColumnNames = Literal["standard", "river"]
 
@@ -80,6 +81,9 @@ def ensure_output_dir(output_dir: Path, *, overwrite: bool, dry_run: bool) -> No
     if overwrite:
         return
     existing = [output_dir / name for name in (NODE_MAP_NAME, TIMESERIES_NAME, PEAK_NAME) if (output_dir / name).exists()]
+    graph_dir = output_dir / GRAPH_DIR_NAME
+    if graph_dir.exists():
+        existing.extend(path for path in graph_dir.glob("*.png") if path.is_file())
     if existing:
         joined = ", ".join(str(path) for path in existing)
         raise FileExistsError(f"出力CSVが既に存在します。上書きする場合は --overwrite を指定してください: {joined}")
