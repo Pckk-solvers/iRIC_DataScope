@@ -1,0 +1,4 @@
+INHERIT: mkdocs.yml
+
+site_dir: build_docs/release_site
+use_directory_urls: false

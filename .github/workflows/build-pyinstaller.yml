@@ -34,9 +34,19 @@ jobs:
           $version = $tag.Substring(1)
           "IRIC_DATASCOPE_VERSION=$version" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           "ARCHIVE_NAME=iRIC_DataScope-$tag-windows-x64.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          "DOCS_ARCHIVE_NAME=iRIC_DataScope-$tag-docs.zip" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
 
       - name: Sync dependencies for build
-        run: uv sync --frozen --group build --no-group dev
+        run: uv sync --frozen --group build --group dev
+
+      - name: Build documentation
+        run: uv run mkdocs build --strict -f mkdocs.release.yml
+
+      - name: Archive documentation
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release -Force | Out-Null
+          Compress-Archive -Path "build_docs\release_site\*" -DestinationPath "release\$env:DOCS_ARCHIVE_NAME" -Force
 
       - name: Build EXE with PyInstaller
         run: uv run pyinstaller --noconfirm iRIC_DataScope.spec
@@ -53,6 +63,12 @@ jobs:
           name: pyinstaller-windows
           path: release/${{ env.ARCHIVE_NAME }}
 
+      - name: Upload documentation artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: mkdocs-site
+          path: release/${{ env.DOCS_ARCHIVE_NAME }}
+
       - name: Create pre-release
         uses: softprops/action-gh-release@v2
         with:
@@ -64,4 +80,7 @@ jobs:
 
             Included artifact:
             - `${{ env.ARCHIVE_NAME }}`
-          files: release/${{ env.ARCHIVE_NAME }}
+            - `${{ env.DOCS_ARCHIVE_NAME }}`
+          files: |
+            release/${{ env.ARCHIVE_NAME }}
+            release/${{ env.DOCS_ARCHIVE_NAME }}
