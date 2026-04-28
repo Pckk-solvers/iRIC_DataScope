@@ -83,6 +83,28 @@ def _y_axis_spec(values: pd.Series) -> tuple[float, float, float]:
     return (bottom, top, step)
 
 
+def _y_axis_spec_with_interval(values: pd.Series, interval: float) -> tuple[float, float, float]:
+    numeric = pd.to_numeric(values, errors="coerce").dropna()
+    step = float(interval)
+    if numeric.empty:
+        return (0.0, step, step)
+    lower = float(numeric.min())
+    upper = float(numeric.max())
+    if math.isclose(lower, upper):
+        return (lower - step, lower + step, step)
+    bottom = math.floor(lower / step) * step
+    top = math.ceil(upper / step) * step
+    if math.isclose(bottom, top):
+        top = bottom + step
+    return (bottom, top, step)
+
+
+def y_axis_spec(values: pd.Series, y_tick_interval: float | None) -> tuple[float, float, float]:
+    if y_tick_interval and y_tick_interval > 0:
+        return _y_axis_spec_with_interval(values, y_tick_interval)
+    return _y_axis_spec(values)
+
+
 def collect_graph_limits(
     timeseries: pd.DataFrame,
     *,
@@ -255,12 +277,12 @@ def write_section_graphs(
     x_limits = collect_graph_limits(timeseries, x_tick_interval_hour=x_tick_interval_hour)
     shared_y_spec: tuple[float, float, float] | None = None
     if shared_y_scale:
-        shared_y_spec = _y_axis_spec(timeseries.get("mean_wse", pd.Series(dtype=float)))
+        shared_y_spec = y_axis_spec(timeseries.get("mean_wse", pd.Series(dtype=float)), y_tick_interval)
     output_files: list[Path] = []
     for section_id, group in timeseries.groupby("section_id", sort=False):
         first = group.iloc[0]
         section_name = str(first.get("section_name", section_id))
-        y_spec = shared_y_spec or _y_axis_spec(group.get("mean_wse", pd.Series(dtype=float)))
+        y_spec = shared_y_spec or y_axis_spec(group.get("mean_wse", pd.Series(dtype=float)), y_tick_interval)
         y_limits = (y_spec[0], y_spec[1])
         path = graph_dir / f"{_safe_filename(section_id)}.png"
         _render_section_graph(

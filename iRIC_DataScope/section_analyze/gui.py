@@ -9,8 +9,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import pandas as pd
 
 from iRIC_DataScope.section_analyze.models import SectionAnalyzeOptions
-from iRIC_DataScope.section_analyze.plotter import _y_axis_spec, build_section_figure, collect_graph_limits
-from iRIC_DataScope.section_analyze.processor import run_section_analysis
+from iRIC_DataScope.section_analyze.plotter import build_section_figure, collect_graph_limits, y_axis_spec
+from iRIC_DataScope.section_analyze.processor import build_preview_timeseries, run_section_analysis
 from iRIC_DataScope.section_analyze.shp_reader import list_shp_fields
 
 
@@ -499,6 +499,8 @@ class SectionAnalyzeGUI(tk.Toplevel):
         x_tick_interval_hour = float(x_tick_text) if x_tick_text else None
         y_tick_text = self.y_tick_interval_var.get().strip()
         y_tick_interval = float(y_tick_text) if y_tick_text else None
+        if y_tick_interval is not None and y_tick_interval <= 0:
+            raise ValueError("縦軸目盛間隔は正の値を指定してください。")
         graph_width_inch = float(self.graph_width_inch_var.get().strip())
         graph_height_inch = float(self.graph_height_inch_var.get().strip())
         graph_dpi = int(self.graph_dpi_var.get().strip())
@@ -527,6 +529,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
 
     def _build_preview_options(self) -> SectionAnalyzeOptions:
         base = self._build_options()
+        section_limit = None if base.shared_y_scale else 1
         return SectionAnalyzeOptions(
             depth_threshold=base.depth_threshold,
             sample_interval=base.sample_interval,
@@ -543,7 +546,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
             graph_width_inch=base.graph_width_inch,
             graph_height_inch=base.graph_height_inch,
             graph_dpi=base.graph_dpi,
-            section_limit=1,
+            section_limit=section_limit,
         )
 
     # ------------------------------------------------------------------
@@ -589,34 +592,31 @@ class SectionAnalyzeGUI(tk.Toplevel):
             messagebox.showerror("エラー", f"設定値が不正です:\n{exc}", parent=self)
             return
 
-        preview_output_dir = self.output_dir / "_preview"
         self._set_run_button_state(False)
         self._status_var.set("プレビュー生成中...")
-        self._status_detail_var.set("1断面のみでグラフ確認用PNGを出力します。")
+        self._status_detail_var.set("1断面のみでメモリ上プレビューを生成します。")
 
         def worker() -> None:
             try:
-                result = run_section_analysis(
+                timeseries = build_preview_timeseries(
                     input_path=self.input_path,
                     section_shp_path=Path(self.section_shp_var.get().strip()),
-                    output_dir=preview_output_dir,
                     options=options,
                 )
-                pngs = [p for p in result.output_files if p.suffix.lower() == ".png"]
-                if not pngs:
-                    raise RuntimeError("プレビュー用PNGが生成されませんでした。")
+                if timeseries.empty:
+                    raise RuntimeError("プレビュー対象の時系列データが空です。")
             except Exception as exc:
                 error = exc
                 self.after(0, lambda: self._finish_error(error))
                 return
-            self.after(0, lambda: self._finish_preview_success(result.output_dir))
+            self.after(0, lambda: self._finish_preview_success(timeseries))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _finish_preview_success(self, preview_output_dir: Path) -> None:
+    def _finish_preview_success(self, timeseries: pd.DataFrame) -> None:
         self._set_run_button_state(True)
         self._status_var.set("プレビュー生成完了")
-        self._status_detail_var.set(str(preview_output_dir))
+        self._status_detail_var.set("メモリ上でプレビュー生成")
 
         win = tk.Toplevel(self)
         win.title("1断面グラフプレビュー")
@@ -638,10 +638,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
         plot_host.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 8))
         plot_host.grid_propagate(False)
         try:
-            ts_path = preview_output_dir / "section_timeseries.csv"
-            df = pd.read_csv(ts_path, encoding="utf-8-sig")
-            if df.empty:
-                raise RuntimeError("プレビュー対象の時系列データが空です。")
+            df = timeseries
             first_id = str(df.iloc[0]["section_id"])
             group = df[df["section_id"] == first_id].copy()
             section_name = str(group.iloc[0].get("section_name", first_id))
@@ -650,7 +647,10 @@ class SectionAnalyzeGUI(tk.Toplevel):
             y_tick_text = self.y_tick_interval_var.get().strip()
             y_tick_interval = float(y_tick_text) if y_tick_text else None
             x_limits = collect_graph_limits(group, x_tick_interval_hour=x_tick_interval_hour)
-            y_spec = _y_axis_spec(group.get("mean_wse", pd.Series(dtype=float)))
+            if self.shared_y_scale_var.get():
+                y_spec = y_axis_spec(df.get("mean_wse", pd.Series(dtype=float)), y_tick_interval)
+            else:
+                y_spec = y_axis_spec(group.get("mean_wse", pd.Series(dtype=float)), y_tick_interval)
             fig = build_section_figure(
                 section_id=first_id,
                 section_name=section_name,

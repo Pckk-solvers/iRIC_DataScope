@@ -178,3 +178,35 @@ def run_section_analysis(
         )
     finally:
         data_source.close()
+
+
+def build_preview_timeseries(
+    input_path: Path,
+    section_shp_path: Path,
+    options: SectionAnalyzeOptions,
+) -> pd.DataFrame:
+    """プレビュー用に時系列DataFrameだけを作る（ファイル出力なし）。"""
+    input_path = Path(input_path)
+    section_shp_path = Path(section_shp_path)
+
+    data_source = SectionDataSource(input_path)
+    try:
+        grid_nodes = data_source.load_grid_nodes()
+        section_lines = read_section_lines(section_shp_path, options)
+        if options.section_limit and options.section_limit > 0:
+            section_lines = section_lines[: options.section_limit]
+        section_nodes, _actual_sample_interval = map_section_nodes(
+            grid_nodes,
+            section_lines,
+            sample_interval=options.sample_interval,
+        )
+        nodes_by_section: dict[str, list[SectionNode]] = {}
+        for node in section_nodes:
+            nodes_by_section.setdefault(node.section_id, []).append(node)
+
+        rows: list[dict] = []
+        for frame in data_source.iter_result_frames(limit_steps=options.limit_steps):
+            rows.extend(_calculate_timeseries_rows(frame, nodes_by_section, options))
+        return pd.DataFrame(rows)
+    finally:
+        data_source.close()
