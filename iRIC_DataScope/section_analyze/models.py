@@ -21,6 +21,7 @@ class SectionAnalyzeOptions:
     column_names: Literal["standard", "river"] = "standard"
     shared_y_scale: bool = False
     x_tick_interval_hour: float | None = None
+    y_tick_interval: float | None = None
     title_template: str = "{section_id} {section_name} / 平均水位時系列"
     graph_width_inch: float = 12.0
     graph_height_inch: float = 4.8

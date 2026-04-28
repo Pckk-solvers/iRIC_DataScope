@@ -22,6 +22,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--limit-steps", type=int, default=None, help="先頭Nステップだけ処理")
     parser.add_argument("--shared-y-scale", action="store_true", help="グラフのY軸を全断面で共通化する")
     parser.add_argument("--x-tick-interval-hour", type=float, default=None, help="グラフ横軸の目盛間隔[h]")
+    parser.add_argument("--y-tick-interval", type=float, default=None, help="グラフ縦軸の目盛間隔")
     parser.add_argument(
         "--title-template",
         default="{section_id} {section_name} / 平均水位時系列",
@@ -73,6 +74,7 @@ def main(argv: list[str] | None = None) -> int:
         column_names=args.column_names,
         shared_y_scale=args.shared_y_scale,
         x_tick_interval_hour=args.x_tick_interval_hour,
+        y_tick_interval=args.y_tick_interval,
         title_template=args.title_template,
         graph_width_inch=args.graph_width_inch,
         graph_height_inch=args.graph_height_inch,

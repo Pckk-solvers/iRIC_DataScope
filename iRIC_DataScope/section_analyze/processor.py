@@ -150,6 +150,7 @@ def run_section_analysis(
                 overwrite=options.overwrite,
                 shared_y_scale=options.shared_y_scale,
                 x_tick_interval_hour=options.x_tick_interval_hour,
+                y_tick_interval=options.y_tick_interval,
                 title_template=options.title_template,
                 graph_width_inch=options.graph_width_inch,
                 graph_height_inch=options.graph_height_inch,

@@ -96,10 +96,10 @@ def collect_graph_limits(
     x_max = float(values.max())
     if math.isclose(x_min, x_max):
         step = x_tick_interval_hour if x_tick_interval_hour and x_tick_interval_hour > 0 else 1.0
-        return (x_min - step, x_min)
+        return (x_min - step * 0.5, x_min)
     step = x_tick_interval_hour if x_tick_interval_hour and x_tick_interval_hour > 0 else _tick_step(x_max - x_min)
-    # 開始側は1目盛ぶん余白、終了側は最終目盛で閉じる
-    left = math.floor(x_min / step) * step - step
+    # 開始側は0.5目盛ぶん余白、終了側は最終目盛で閉じる
+    left = math.floor(x_min / step) * step - step * 0.5
     right = math.ceil(x_max / step) * step
     if math.isclose(left, right):
         right = left + step
@@ -116,6 +116,7 @@ def _render_section_graph(
     y_limits: tuple[float, float],
     y_tick_step: float,
     x_tick_interval_hour: float | None,
+    y_tick_interval: float | None,
     title_template: str,
     graph_width_inch: float,
     graph_height_inch: float,
@@ -129,6 +130,7 @@ def _render_section_graph(
         y_limits=y_limits,
         y_tick_step=y_tick_step,
         x_tick_interval_hour=x_tick_interval_hour,
+        y_tick_interval=y_tick_interval,
         title_template=title_template,
         graph_width_inch=graph_width_inch,
         graph_height_inch=graph_height_inch,
@@ -147,6 +149,7 @@ def build_section_figure(
     y_limits: tuple[float, float],
     y_tick_step: float,
     x_tick_interval_hour: float | None,
+    y_tick_interval: float | None,
     title_template: str,
     graph_width_inch: float,
     graph_height_inch: float,
@@ -177,7 +180,9 @@ def build_section_figure(
         ax.xaxis.set_major_locator(MultipleLocator(base=x_tick_interval_hour))
     else:
         ax.xaxis.set_major_locator(MaxNLocator(nbins=7))
-    if y_tick_step > 0:
+    if y_tick_interval and y_tick_interval > 0:
+        ax.yaxis.set_major_locator(MultipleLocator(base=y_tick_interval))
+    elif y_tick_step > 0:
         ax.yaxis.set_major_locator(MultipleLocator(base=y_tick_step))
     ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _pos: f"{value:g}"))
 
@@ -229,6 +234,7 @@ def write_section_graphs(
     overwrite: bool,
     shared_y_scale: bool = False,
     x_tick_interval_hour: float | None = None,
+    y_tick_interval: float | None = None,
     title_template: str = "{section_id} {section_name} / 平均水位時系列",
     graph_width_inch: float = 12.0,
     graph_height_inch: float = 4.8,
@@ -266,6 +272,7 @@ def write_section_graphs(
             y_limits=y_limits,
             y_tick_step=y_spec[2],
             x_tick_interval_hour=x_tick_interval_hour,
+            y_tick_interval=y_tick_interval,
             title_template=title_template,
             graph_width_inch=graph_width_inch,
             graph_height_inch=graph_height_inch,

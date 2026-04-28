@@ -32,6 +32,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
         self.column_names_var = tk.StringVar(value="standard")
         self.shared_y_scale_var = tk.BooleanVar(value=False)
         self.x_tick_interval_hour_var = tk.StringVar()
+        self.y_tick_interval_var = tk.StringVar()
         self.title_template_var = tk.StringVar(value="{section_id} {section_name} / 平均水位時系列")
         self.graph_width_inch_var = tk.StringVar(value="12.0")
         self.graph_height_inch_var = tk.StringVar(value="4.8")
@@ -238,15 +239,18 @@ class SectionAnalyzeGUI(tk.Toplevel):
         ttk.Label(graph, text="横軸目盛間隔[h]", style="SA.PreviewKey.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=3)
         ttk.Entry(graph, textvariable=self.x_tick_interval_hour_var, width=18).grid(row=1, column=1, sticky="w", pady=3)
         ttk.Label(graph, text="空欄 = 自動目盛", style="SA.Muted.TLabel").grid(row=1, column=2, sticky="w", pady=3)
-        ttk.Label(graph, text="タイトル形式", style="SA.PreviewKey.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=3)
-        ttk.Entry(graph, textvariable=self.title_template_var, width=52).grid(row=2, column=1, columnspan=2, sticky="ew", padx=(0, 8), pady=3)
-        ttk.Label(graph, text="{section_id}, {section_name} が使用可", style="SA.Muted.TLabel").grid(row=3, column=1, columnspan=2, sticky="w", pady=(0, 3))
-        ttk.Label(graph, text="グラフ幅[inch]", style="SA.PreviewKey.TLabel").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=3)
-        ttk.Entry(graph, textvariable=self.graph_width_inch_var, width=18).grid(row=4, column=1, sticky="w", pady=3)
-        ttk.Label(graph, text="グラフ高さ[inch]", style="SA.PreviewKey.TLabel").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=3)
-        ttk.Entry(graph, textvariable=self.graph_height_inch_var, width=18).grid(row=5, column=1, sticky="w", pady=3)
-        ttk.Label(graph, text="解像度DPI", style="SA.PreviewKey.TLabel").grid(row=6, column=0, sticky="w", padx=(0, 8), pady=3)
-        ttk.Entry(graph, textvariable=self.graph_dpi_var, width=18).grid(row=6, column=1, sticky="w", pady=3)
+        ttk.Label(graph, text="縦軸目盛間隔", style="SA.PreviewKey.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Entry(graph, textvariable=self.y_tick_interval_var, width=18).grid(row=2, column=1, sticky="w", pady=3)
+        ttk.Label(graph, text="空欄 = 自動目盛", style="SA.Muted.TLabel").grid(row=2, column=2, sticky="w", pady=3)
+        ttk.Label(graph, text="タイトル形式", style="SA.PreviewKey.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Entry(graph, textvariable=self.title_template_var, width=52).grid(row=3, column=1, columnspan=2, sticky="ew", padx=(0, 8), pady=3)
+        ttk.Label(graph, text="{section_id}, {section_name} が使用可", style="SA.Muted.TLabel").grid(row=4, column=1, columnspan=2, sticky="w", pady=(0, 3))
+        ttk.Label(graph, text="グラフ幅[inch]", style="SA.PreviewKey.TLabel").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Entry(graph, textvariable=self.graph_width_inch_var, width=18).grid(row=5, column=1, sticky="w", pady=3)
+        ttk.Label(graph, text="グラフ高さ[inch]", style="SA.PreviewKey.TLabel").grid(row=6, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Entry(graph, textvariable=self.graph_height_inch_var, width=18).grid(row=6, column=1, sticky="w", pady=3)
+        ttk.Label(graph, text="解像度DPI", style="SA.PreviewKey.TLabel").grid(row=7, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Entry(graph, textvariable=self.graph_dpi_var, width=18).grid(row=7, column=1, sticky="w", pady=3)
 
         output = ttk.LabelFrame(container, text="出力設定", style="SA.Section.TLabelframe")
         output.grid(row=2, column=0, sticky="ew")
@@ -293,6 +297,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
             ("側線SHP", "shp"),
             ("Y軸", "yaxis"),
             ("横軸刻み[h]", "xtick"),
+            ("縦軸刻み", "ytick"),
             ("列名", "colname"),
             ("上書き", "overwrite"),
             ("水深下限", "threshold"),
@@ -387,6 +392,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
             self.column_names_var,
             self.shared_y_scale_var,
             self.x_tick_interval_hour_var,
+            self.y_tick_interval_var,
             self.title_template_var,
             self.graph_width_inch_var,
             self.graph_height_inch_var,
@@ -423,6 +429,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
         )
         self._preview_vars["colname"].set(self.column_names_var.get())
         self._preview_vars["xtick"].set(self.x_tick_interval_hour_var.get().strip() or "自動")
+        self._preview_vars["ytick"].set(self.y_tick_interval_var.get().strip() or "自動")
         self._preview_vars["overwrite"].set(
             "上書きする" if self.overwrite_var.get() else "上書きしない"
         )
@@ -490,6 +497,8 @@ class SectionAnalyzeGUI(tk.Toplevel):
         sample_interval = float(interval_text) if interval_text else None
         x_tick_text = self.x_tick_interval_hour_var.get().strip()
         x_tick_interval_hour = float(x_tick_text) if x_tick_text else None
+        y_tick_text = self.y_tick_interval_var.get().strip()
+        y_tick_interval = float(y_tick_text) if y_tick_text else None
         graph_width_inch = float(self.graph_width_inch_var.get().strip())
         graph_height_inch = float(self.graph_height_inch_var.get().strip())
         graph_dpi = int(self.graph_dpi_var.get().strip())
@@ -509,6 +518,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
             column_names=self.column_names_var.get(),
             shared_y_scale=self.shared_y_scale_var.get(),
             x_tick_interval_hour=x_tick_interval_hour,
+            y_tick_interval=y_tick_interval,
             title_template=title_template,
             graph_width_inch=graph_width_inch,
             graph_height_inch=graph_height_inch,
@@ -528,6 +538,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
             column_names=base.column_names,
             shared_y_scale=base.shared_y_scale,
             x_tick_interval_hour=base.x_tick_interval_hour,
+            y_tick_interval=base.y_tick_interval,
             title_template=base.title_template,
             graph_width_inch=base.graph_width_inch,
             graph_height_inch=base.graph_height_inch,
@@ -636,6 +647,8 @@ class SectionAnalyzeGUI(tk.Toplevel):
             section_name = str(group.iloc[0].get("section_name", first_id))
             x_tick_text = self.x_tick_interval_hour_var.get().strip()
             x_tick_interval_hour = float(x_tick_text) if x_tick_text else None
+            y_tick_text = self.y_tick_interval_var.get().strip()
+            y_tick_interval = float(y_tick_text) if y_tick_text else None
             x_limits = collect_graph_limits(group, x_tick_interval_hour=x_tick_interval_hour)
             y_spec = _y_axis_spec(group.get("mean_wse", pd.Series(dtype=float)))
             fig = build_section_figure(
@@ -646,6 +659,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
                 y_limits=(y_spec[0], y_spec[1]),
                 y_tick_step=y_spec[2],
                 x_tick_interval_hour=x_tick_interval_hour,
+                y_tick_interval=y_tick_interval,
                 title_template=self.title_template_var.get().strip() or "{section_id} {section_name} / 平均水位時系列",
                 graph_width_inch=float(self.graph_width_inch_var.get().strip() or "12.0"),
                 graph_height_inch=float(self.graph_height_inch_var.get().strip() or "4.8"),
