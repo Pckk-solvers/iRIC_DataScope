@@ -635,3 +635,57 @@ iric-datascope-section = "iRIC_DataScope.section_analyze.cli:main"
 * Excel出力
 * GUIでの地図プレビュー
 * `nearest_dist` による除外
+
+## 10. グラフ仕様更新とUI拡張（2026-04-28）
+
+次の改修で、`plotter.py` と `gui.py` / `cli.py` に以下を反映する。
+
+### 10.1 `plotter.py` の更新方針
+
+* Y軸:
+  下端は開始側の値が読みやすい範囲にし、上端は最上位目盛で閉じる
+* 外枠:
+  上下左右のスパインを表示する
+* グリッド:
+  点線（`linestyle='--'`）に変更し、色は現状より濃くする
+* 軸ラベル:
+  `xlabel='時間[h]'`、`ylabel='水位[T.P.m]'` に固定
+* 時刻変換:
+  描画用データで `time_sec -> time_hour = time_sec / 3600.0`
+* 最大点注記:
+  文言は `Max` を使う（例: `Max 12.34 (t=1.5h)`）
+* 横軸目盛:
+  `x_tick_interval_hour` が指定された場合は固定刻みで主目盛を配置
+  未指定時は自動目盛
+
+### 10.2 オプション追加
+
+`SectionAnalyzeOptions` に次を追加する想定。
+
+* `x_tick_interval_hour: float | None`
+  * `None`: 自動目盛
+  * 指定値あり: 指定時間刻みで主目盛
+
+### 10.3 GUI拡張方針
+
+`section_analyze/gui.py` の設定欄に次を追加する。
+
+* `横軸目盛間隔[h]` 入力欄（空欄で自動）
+* `断面IDフィールド` / `断面名フィールド` は
+  SHP読み込み後の属性候補を選択できるUIへ拡張
+* タイトル調整欄（次段実装）
+  * 表示ON/OFF
+  * テンプレート文字列
+  * ID/名称の表示モード
+
+### 10.4 CLI拡張方針
+
+`section_analyze/cli.py` に以下を追加する。
+
+* `--x-tick-interval-hour`
+  * 例: `--x-tick-interval-hour 0.5`
+
+### 10.5 後方互換
+
+* 既定挙動は現行と同じく自動目盛を維持する
+* 時刻の元データ（秒）は保持し、表示変換のみグラフ描画で行う
