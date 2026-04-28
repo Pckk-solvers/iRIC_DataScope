@@ -209,24 +209,24 @@ class SectionAnalyzeGUI(tk.Toplevel):
             )
 
         r = len(entries)
-        ttk.Label(section, text="断面IDフィールド", style="SA.PreviewKey.TLabel").grid(
+        ttk.Label(section, text="断面ID属性（任意）", style="SA.PreviewKey.TLabel").grid(
             row=r, column=0, sticky="w", padx=(0, 8), pady=3,
         )
         self.section_id_combo = ttk.Combobox(
             section, textvariable=self.section_id_field_var, values=self._section_field_values, state="readonly", width=18
         )
         self.section_id_combo.grid(row=r, column=1, sticky="w", pady=3)
-        ttk.Label(section, text="SHP属性から選択", style="SA.Muted.TLabel").grid(row=r, column=2, sticky="w", pady=3)
+        ttk.Label(section, text="未指定なら SEC001... を自動採番", style="SA.Muted.TLabel").grid(row=r, column=2, sticky="w", pady=3)
 
         r += 1
-        ttk.Label(section, text="断面名フィールド", style="SA.PreviewKey.TLabel").grid(
+        ttk.Label(section, text="断面名属性（必須）", style="SA.PreviewKey.TLabel").grid(
             row=r, column=0, sticky="w", padx=(0, 8), pady=3,
         )
         self.section_name_combo = ttk.Combobox(
             section, textvariable=self.section_name_field_var, values=self._section_field_values, state="readonly", width=18
         )
         self.section_name_combo.grid(row=r, column=1, sticky="w", pady=3)
-        ttk.Label(section, text="SHP属性から選択", style="SA.Muted.TLabel").grid(row=r, column=2, sticky="w", pady=3)
+        ttk.Label(section, text="タイトルの {section_name} に使用", style="SA.Muted.TLabel").grid(row=r, column=2, sticky="w", pady=3)
 
         graph = ttk.LabelFrame(container, text="グラフ設定", style="SA.Section.TLabelframe")
         graph.grid(row=1, column=0, sticky="ew", pady=(0, 8))
@@ -244,7 +244,11 @@ class SectionAnalyzeGUI(tk.Toplevel):
         ttk.Label(graph, text="空欄 = 自動目盛", style="SA.Muted.TLabel").grid(row=2, column=2, sticky="w", pady=3)
         ttk.Label(graph, text="タイトル形式", style="SA.PreviewKey.TLabel").grid(row=3, column=0, sticky="w", padx=(0, 8), pady=3)
         ttk.Entry(graph, textvariable=self.title_template_var, width=52).grid(row=3, column=1, columnspan=2, sticky="ew", padx=(0, 8), pady=3)
-        ttk.Label(graph, text="{section_id}, {section_name} が使用可", style="SA.Muted.TLabel").grid(row=4, column=1, columnspan=2, sticky="w", pady=(0, 3))
+        ttk.Label(
+            graph,
+            text="{section_id}/{section_name} は上の属性設定結果を使用",
+            style="SA.Muted.TLabel",
+        ).grid(row=4, column=1, columnspan=2, sticky="w", pady=(0, 3))
         ttk.Label(graph, text="グラフ幅[inch]", style="SA.PreviewKey.TLabel").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=3)
         ttk.Entry(graph, textvariable=self.graph_width_inch_var, width=18).grid(row=5, column=1, sticky="w", pady=3)
         ttk.Label(graph, text="グラフ高さ[inch]", style="SA.PreviewKey.TLabel").grid(row=6, column=0, sticky="w", padx=(0, 8), pady=3)
@@ -510,6 +514,8 @@ class SectionAnalyzeGUI(tk.Toplevel):
             section_id_field = ""
         if section_name_field == "(自動)":
             section_name_field = ""
+        if not section_name_field:
+            raise ValueError("断面名属性（必須）を選択してください。")
         title_template = self.title_template_var.get().strip() or "{section_id} {section_name} / 平均水位時系列"
         return SectionAnalyzeOptions(
             depth_threshold=depth_threshold,

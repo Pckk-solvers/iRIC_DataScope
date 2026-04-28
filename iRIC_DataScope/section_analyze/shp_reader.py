@@ -7,22 +7,11 @@ import shapefile
 from iRIC_DataScope.section_analyze.models import SectionAnalyzeOptions, SectionLine
 
 
-SECTION_ID_CANDIDATES = ("section_id", "ID", "id", "SecNo", "sec_no")
-SECTION_NAME_CANDIDATES = ("section_name", "section_na", "Name", "name", "断面名")
-
-
-def _pick_field(fields: list[str], preferred: str | None, candidates: tuple[str, ...]) -> str | None:
+def _pick_field(fields: list[str], preferred: str | None) -> str | None:
     if preferred:
         if preferred not in fields:
             raise ValueError(f"SHP属性フィールドが見つかりません: {preferred}")
         return preferred
-    lower_map = {field.lower(): field for field in fields}
-    for candidate in candidates:
-        if candidate in fields:
-            return candidate
-        found = lower_map.get(candidate.lower())
-        if found:
-            return found
     return None
 
 
@@ -51,8 +40,10 @@ def read_section_lines(shp_path: Path, options: SectionAnalyzeOptions) -> list[S
 
     reader = shapefile.Reader(str(path), encoding="utf-8")
     fields = [field[0] for field in reader.fields[1:]]
-    id_field = _pick_field(fields, options.section_id_field, SECTION_ID_CANDIDATES)
-    name_field = _pick_field(fields, options.section_name_field, SECTION_NAME_CANDIDATES)
+    id_field = _pick_field(fields, options.section_id_field)
+    name_field = _pick_field(fields, options.section_name_field)
+    if not name_field:
+        raise ValueError("断面名属性を指定してください。")
 
     lines: list[SectionLine] = []
     for idx, shape_record in enumerate(reader.iterShapeRecords(), start=1):
@@ -66,7 +57,9 @@ def read_section_lines(shp_path: Path, options: SectionAnalyzeOptions) -> list[S
             raise ValueError(f"側線は2点以上必要です: feature={idx}")
 
         section_id = _to_value(shape_record.record, id_field) or f"SEC{idx:03d}"
-        section_name = _to_value(shape_record.record, name_field) or section_id
+        section_name = _to_value(shape_record.record, name_field)
+        if not section_name:
+            raise ValueError(f"断面名属性が空です: feature={idx}, field={name_field}")
         order_no = idx
         record_dict = shape_record.record.as_dict()
         if "order_no" in record_dict:

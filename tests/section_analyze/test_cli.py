@@ -39,11 +39,13 @@ def test_cli_dry_run_writes_no_csv(tmp_path: Path) -> None:
         [
             "--input",
             str(input_dir),
-            "--sections",
-            str(FIXTURE),
-            "--output",
-            str(output_dir),
-            "--dry-run",
+                "--sections",
+                str(FIXTURE),
+                "--section-name-field",
+                "section_na",
+                "--output",
+                str(output_dir),
+                "--dry-run",
         ]
     )
 
@@ -61,11 +63,13 @@ def test_cli_river_column_names(tmp_path: Path) -> None:
         [
             "--input",
             str(input_dir),
-            "--sections",
-            str(FIXTURE),
-            "--output",
-            str(output_dir),
-            "--column-names",
+                "--sections",
+                str(FIXTURE),
+                "--section-name-field",
+                "section_na",
+                "--output",
+                str(output_dir),
+                "--column-names",
             "river",
         ]
     )
@@ -86,11 +90,13 @@ def test_cli_writes_graph_png(tmp_path: Path) -> None:
         [
             "--input",
             str(input_dir),
-            "--sections",
-            str(FIXTURE),
-            "--output",
-            str(output_dir),
-            "--overwrite",
+                "--sections",
+                str(FIXTURE),
+                "--section-name-field",
+                "section_na",
+                "--output",
+                str(output_dir),
+                "--overwrite",
         ]
     )
 
@@ -111,11 +117,13 @@ def test_cli_shared_y_scale_option(tmp_path: Path) -> None:
         [
             "--input",
             str(input_dir),
-            "--sections",
-            str(FIXTURE),
-            "--output",
-            str(output_dir),
-            "--overwrite",
+                "--sections",
+                str(FIXTURE),
+                "--section-name-field",
+                "section_na",
+                "--output",
+                str(output_dir),
+                "--overwrite",
             "--shared-y-scale",
         ]
     )
