@@ -5,8 +5,13 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
+import matplotlib.image as mpimg
+
 from iRIC_DataScope.section_analyze.models import SectionAnalyzeOptions
 from iRIC_DataScope.section_analyze.processor import run_section_analysis
+from iRIC_DataScope.section_analyze.shp_reader import list_shp_fields
 
 
 class SectionAnalyzeGUI(tk.Toplevel):
@@ -26,7 +31,16 @@ class SectionAnalyzeGUI(tk.Toplevel):
         self.section_name_field_var = tk.StringVar()
         self.column_names_var = tk.StringVar(value="standard")
         self.shared_y_scale_var = tk.BooleanVar(value=False)
+        self.x_tick_interval_hour_var = tk.StringVar()
+        self.title_template_var = tk.StringVar(value="{section_id} {section_name} / 平均水位時系列")
+        self.graph_width_inch_var = tk.StringVar(value="12.0")
+        self.graph_height_inch_var = tk.StringVar(value="4.8")
+        self.graph_dpi_var = tk.StringVar(value="180")
         self.overwrite_var = tk.BooleanVar(value=True)
+        self._section_field_values = ["(自動)"]
+        self._last_field_source: Path | None = None
+        self.section_id_field_var.set("(自動)")
+        self.section_name_field_var.set("(自動)")
 
         self._status_var = tk.StringVar(value="側線SHPを選択してください。")
         self._status_detail_var = tk.StringVar(value="")
@@ -170,16 +184,18 @@ class SectionAnalyzeGUI(tk.Toplevel):
     # Settings section
     # ------------------------------------------------------------------
     def _build_settings_section(self, parent: ttk.Frame) -> None:
-        section = ttk.LabelFrame(parent, text="集計設定", style="SA.Section.TLabelframe")
-        section.grid(row=1, column=0, sticky="nsew")
+        container = ttk.Frame(parent)
+        container.grid(row=1, column=0, sticky="nsew")
+        container.columnconfigure(0, weight=1)
+
+        section = ttk.LabelFrame(container, text="集計設定", style="SA.Section.TLabelframe")
+        section.grid(row=0, column=0, sticky="ew", pady=(0, 8))
         section.columnconfigure(1, weight=1)
 
         # Entry-based settings  (label, var, hint)
         entries = [
             ("有効水深下限", self.depth_threshold_var, "depth ≥ この値の点のみ有効"),
             ("断面サンプル間隔", self.sample_interval_var, "空欄 = 自動推定"),
-            ("断面IDフィールド", self.section_id_field_var, "空欄 = 自動検出"),
-            ("断面名フィールド", self.section_name_field_var, "空欄 = 自動検出"),
         ]
         for row, (label, var, hint) in enumerate(entries):
             ttk.Label(section, text=label, style="SA.PreviewKey.TLabel").grid(
@@ -191,18 +207,58 @@ class SectionAnalyzeGUI(tk.Toplevel):
                 row=row, column=2, sticky="w", pady=3,
             )
 
-        sep_row = len(entries)
-        ttk.Separator(section).grid(
-            row=sep_row, column=0, columnspan=3, sticky="ew", pady=6,
+        r = len(entries)
+        ttk.Label(section, text="断面IDフィールド", style="SA.PreviewKey.TLabel").grid(
+            row=r, column=0, sticky="w", padx=(0, 8), pady=3,
         )
+        self.section_id_combo = ttk.Combobox(
+            section, textvariable=self.section_id_field_var, values=self._section_field_values, state="readonly", width=18
+        )
+        self.section_id_combo.grid(row=r, column=1, sticky="w", pady=3)
+        ttk.Label(section, text="SHP属性から選択", style="SA.Muted.TLabel").grid(row=r, column=2, sticky="w", pady=3)
+
+        r += 1
+        ttk.Label(section, text="断面名フィールド", style="SA.PreviewKey.TLabel").grid(
+            row=r, column=0, sticky="w", padx=(0, 8), pady=3,
+        )
+        self.section_name_combo = ttk.Combobox(
+            section, textvariable=self.section_name_field_var, values=self._section_field_values, state="readonly", width=18
+        )
+        self.section_name_combo.grid(row=r, column=1, sticky="w", pady=3)
+        ttk.Label(section, text="SHP属性から選択", style="SA.Muted.TLabel").grid(row=r, column=2, sticky="w", pady=3)
+
+        graph = ttk.LabelFrame(container, text="グラフ設定", style="SA.Section.TLabelframe")
+        graph.grid(row=1, column=0, sticky="ew", pady=(0, 8))
+        graph.columnconfigure(1, weight=1)
+
+        ttk.Label(graph, text="グラフY軸", style="SA.PreviewKey.TLabel").grid(row=0, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Checkbutton(graph, text="全断面で共通スケールを使う", variable=self.shared_y_scale_var).grid(
+            row=0, column=1, columnspan=2, sticky="w", pady=3
+        )
+        ttk.Label(graph, text="横軸目盛間隔[h]", style="SA.PreviewKey.TLabel").grid(row=1, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Entry(graph, textvariable=self.x_tick_interval_hour_var, width=18).grid(row=1, column=1, sticky="w", pady=3)
+        ttk.Label(graph, text="空欄 = 自動目盛", style="SA.Muted.TLabel").grid(row=1, column=2, sticky="w", pady=3)
+        ttk.Label(graph, text="タイトル形式", style="SA.PreviewKey.TLabel").grid(row=2, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Entry(graph, textvariable=self.title_template_var, width=52).grid(row=2, column=1, columnspan=2, sticky="ew", padx=(0, 8), pady=3)
+        ttk.Label(graph, text="{section_id}, {section_name} が使用可", style="SA.Muted.TLabel").grid(row=3, column=1, columnspan=2, sticky="w", pady=(0, 3))
+        ttk.Label(graph, text="グラフ幅[inch]", style="SA.PreviewKey.TLabel").grid(row=4, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Entry(graph, textvariable=self.graph_width_inch_var, width=18).grid(row=4, column=1, sticky="w", pady=3)
+        ttk.Label(graph, text="グラフ高さ[inch]", style="SA.PreviewKey.TLabel").grid(row=5, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Entry(graph, textvariable=self.graph_height_inch_var, width=18).grid(row=5, column=1, sticky="w", pady=3)
+        ttk.Label(graph, text="解像度DPI", style="SA.PreviewKey.TLabel").grid(row=6, column=0, sticky="w", padx=(0, 8), pady=3)
+        ttk.Entry(graph, textvariable=self.graph_dpi_var, width=18).grid(row=6, column=1, sticky="w", pady=3)
+
+        output = ttk.LabelFrame(container, text="出力設定", style="SA.Section.TLabelframe")
+        output.grid(row=2, column=0, sticky="ew")
+        output.columnconfigure(1, weight=1)
 
         # Combobox: CSV column names
-        r = sep_row + 1
-        ttk.Label(section, text="CSV列名", style="SA.PreviewKey.TLabel").grid(
+        r = 0
+        ttk.Label(output, text="CSV列名", style="SA.PreviewKey.TLabel").grid(
             row=r, column=0, sticky="w", padx=(0, 8), pady=3,
         )
         cb = ttk.Combobox(
-            section,
+            output,
             textvariable=self.column_names_var,
             values=("standard", "river"),
             state="readonly",
@@ -210,26 +266,14 @@ class SectionAnalyzeGUI(tk.Toplevel):
         )
         cb.grid(row=r, column=1, sticky="w", pady=3)
         ttk.Label(
-            section, text="river = 河川業務向け日本語列名", style="SA.Muted.TLabel",
+            output, text="river = 河川業務向け日本語列名", style="SA.Muted.TLabel",
         ).grid(row=r, column=2, sticky="w", pady=3)
-
-        # Checkboxes
-        r += 1
-        ttk.Label(section, text="グラフY軸", style="SA.PreviewKey.TLabel").grid(
+        r = 1
+        ttk.Label(output, text="既存CSV", style="SA.PreviewKey.TLabel").grid(
             row=r, column=0, sticky="w", padx=(0, 8), pady=3,
         )
         ttk.Checkbutton(
-            section,
-            text="全断面で共通スケールを使う",
-            variable=self.shared_y_scale_var,
-        ).grid(row=r, column=1, columnspan=2, sticky="w", pady=3)
-
-        r += 1
-        ttk.Label(section, text="既存CSV", style="SA.PreviewKey.TLabel").grid(
-            row=r, column=0, sticky="w", padx=(0, 8), pady=3,
-        )
-        ttk.Checkbutton(
-            section,
+            output,
             text="既存の出力を上書きする",
             variable=self.overwrite_var,
         ).grid(row=r, column=1, columnspan=2, sticky="w", pady=3)
@@ -248,10 +292,14 @@ class SectionAnalyzeGUI(tk.Toplevel):
             ("入力状態", "ready"),
             ("側線SHP", "shp"),
             ("Y軸", "yaxis"),
+            ("横軸刻み[h]", "xtick"),
             ("列名", "colname"),
             ("上書き", "overwrite"),
             ("水深下限", "threshold"),
             ("断面サンプル間隔", "interval"),
+            ("タイトル", "title"),
+            ("サイズ", "figsize"),
+            ("DPI", "dpi"),
         ]
         for idx, (label, key) in enumerate(preview_items):
             var = tk.StringVar(value="—")
@@ -310,13 +358,20 @@ class SectionAnalyzeGUI(tk.Toplevel):
         )
         self.run_btn.grid(row=1, column=0, sticky="ew", ipady=4)
 
+        self.preview_btn = ttk.Button(
+            section,
+            text="1断面プレビュー",
+            command=self._run_preview,
+        )
+        self.preview_btn.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+
         ttk.Label(
             section,
             text="output_dir/section_graphs/ に断面ごとの PNG を出力します。",
             style="SA.Muted.TLabel",
             wraplength=300,
             justify="left",
-        ).grid(row=2, column=0, sticky="w", pady=(6, 0))
+        ).grid(row=3, column=0, sticky="w", pady=(6, 0))
 
     # ------------------------------------------------------------------
     # Variable traces
@@ -330,6 +385,11 @@ class SectionAnalyzeGUI(tk.Toplevel):
             self.section_name_field_var,
             self.column_names_var,
             self.shared_y_scale_var,
+            self.x_tick_interval_hour_var,
+            self.title_template_var,
+            self.graph_width_inch_var,
+            self.graph_height_inch_var,
+            self.graph_dpi_var,
             self.overwrite_var,
         ):
             var.trace_add("write", lambda *_: self._refresh_summary())
@@ -340,6 +400,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
 
     def _set_run_button_state(self, enabled: bool) -> None:
         self.run_btn.configure(state="normal" if enabled else "disabled")
+        self.preview_btn.configure(state="normal" if enabled else "disabled")
 
     def _refresh_summary(self) -> None:
         shp_path = self.section_shp_var.get().strip()
@@ -350,6 +411,8 @@ class SectionAnalyzeGUI(tk.Toplevel):
             self._preview_vars["shp"].set("未選択")
         elif shp.exists():
             self._preview_vars["shp"].set(shp.name)
+            if self._last_field_source != shp:
+                self._refresh_field_candidates(shp)
         else:
             self._preview_vars["shp"].set("⚠ 見つかりません")
 
@@ -358,6 +421,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
             "全断面共通" if self.shared_y_scale_var.get() else "断面ごと最適"
         )
         self._preview_vars["colname"].set(self.column_names_var.get())
+        self._preview_vars["xtick"].set(self.x_tick_interval_hour_var.get().strip() or "自動")
         self._preview_vars["overwrite"].set(
             "上書きする" if self.overwrite_var.get() else "上書きしない"
         )
@@ -366,6 +430,11 @@ class SectionAnalyzeGUI(tk.Toplevel):
         )
         interval_text = self.sample_interval_var.get().strip()
         self._preview_vars["interval"].set(interval_text if interval_text else "自動推定")
+        self._preview_vars["title"].set(self.title_template_var.get().strip() or "(既定)")
+        self._preview_vars["figsize"].set(
+            f'{self.graph_width_inch_var.get().strip() or "12.0"} x {self.graph_height_inch_var.get().strip() or "4.8"}'
+        )
+        self._preview_vars["dpi"].set(self.graph_dpi_var.get().strip() or "180")
 
         # Ready state & status bar
         if self._run_enabled():
@@ -394,6 +463,22 @@ class SectionAnalyzeGUI(tk.Toplevel):
         )
         if path:
             self.section_shp_var.set(path)
+            self._refresh_field_candidates(Path(path))
+
+    def _refresh_field_candidates(self, shp_path: Path) -> None:
+        try:
+            fields = list_shp_fields(shp_path)
+        except Exception:
+            fields = []
+        values = ["(自動)", *fields] if fields else ["(自動)"]
+        self._section_field_values = values
+        self._last_field_source = shp_path
+        self.section_id_combo.configure(values=values)
+        self.section_name_combo.configure(values=values)
+        if self.section_id_field_var.get() not in values:
+            self.section_id_field_var.set("(自動)")
+        if self.section_name_field_var.get() not in values:
+            self.section_name_field_var.set("(自動)")
 
     # ------------------------------------------------------------------
     # Build options
@@ -402,14 +487,51 @@ class SectionAnalyzeGUI(tk.Toplevel):
         depth_threshold = float(self.depth_threshold_var.get())
         interval_text = self.sample_interval_var.get().strip()
         sample_interval = float(interval_text) if interval_text else None
+        x_tick_text = self.x_tick_interval_hour_var.get().strip()
+        x_tick_interval_hour = float(x_tick_text) if x_tick_text else None
+        graph_width_inch = float(self.graph_width_inch_var.get().strip())
+        graph_height_inch = float(self.graph_height_inch_var.get().strip())
+        graph_dpi = int(self.graph_dpi_var.get().strip())
+        section_id_field = self.section_id_field_var.get().strip()
+        section_name_field = self.section_name_field_var.get().strip()
+        if section_id_field == "(自動)":
+            section_id_field = ""
+        if section_name_field == "(自動)":
+            section_name_field = ""
+        title_template = self.title_template_var.get().strip() or "{section_id} {section_name} / 平均水位時系列"
         return SectionAnalyzeOptions(
             depth_threshold=depth_threshold,
             sample_interval=sample_interval,
-            section_id_field=self.section_id_field_var.get().strip() or None,
-            section_name_field=self.section_name_field_var.get().strip() or None,
+            section_id_field=section_id_field or None,
+            section_name_field=section_name_field or None,
             overwrite=self.overwrite_var.get(),
             column_names=self.column_names_var.get(),
             shared_y_scale=self.shared_y_scale_var.get(),
+            x_tick_interval_hour=x_tick_interval_hour,
+            title_template=title_template,
+            graph_width_inch=graph_width_inch,
+            graph_height_inch=graph_height_inch,
+            graph_dpi=graph_dpi,
+        )
+
+    def _build_preview_options(self) -> SectionAnalyzeOptions:
+        base = self._build_options()
+        return SectionAnalyzeOptions(
+            depth_threshold=base.depth_threshold,
+            sample_interval=base.sample_interval,
+            section_id_field=base.section_id_field,
+            section_name_field=base.section_name_field,
+            overwrite=True,
+            limit_steps=base.limit_steps,
+            dry_run=False,
+            column_names=base.column_names,
+            shared_y_scale=base.shared_y_scale,
+            x_tick_interval_hour=base.x_tick_interval_hour,
+            title_template=base.title_template,
+            graph_width_inch=base.graph_width_inch,
+            graph_height_inch=base.graph_height_inch,
+            graph_dpi=base.graph_dpi,
+            section_limit=1,
         )
 
     # ------------------------------------------------------------------
@@ -444,6 +566,83 @@ class SectionAnalyzeGUI(tk.Toplevel):
             self.after(0, lambda: self._finish_success(result))
 
         threading.Thread(target=worker, daemon=True).start()
+
+    def _run_preview(self) -> None:
+        if not self._run_enabled():
+            self._refresh_summary()
+            return
+        try:
+            options = self._build_preview_options()
+        except Exception as exc:
+            messagebox.showerror("エラー", f"設定値が不正です:\n{exc}", parent=self)
+            return
+
+        preview_output_dir = self.output_dir / "_preview"
+        self._set_run_button_state(False)
+        self._status_var.set("プレビュー生成中...")
+        self._status_detail_var.set("1断面のみでグラフ確認用PNGを出力します。")
+
+        def worker() -> None:
+            try:
+                result = run_section_analysis(
+                    input_path=self.input_path,
+                    section_shp_path=Path(self.section_shp_var.get().strip()),
+                    output_dir=preview_output_dir,
+                    options=options,
+                )
+                pngs = [p for p in result.output_files if p.suffix.lower() == ".png"]
+                if not pngs:
+                    raise RuntimeError("プレビュー用PNGが生成されませんでした。")
+            except Exception as exc:
+                error = exc
+                self.after(0, lambda: self._finish_error(error))
+                return
+            self.after(0, lambda: self._finish_preview_success(pngs[0]))
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _finish_preview_success(self, image_path: Path) -> None:
+        self._set_run_button_state(True)
+        self._status_var.set("プレビュー生成完了")
+        self._status_detail_var.set(str(image_path))
+
+        win = tk.Toplevel(self)
+        win.title("1断面グラフプレビュー")
+        win.geometry("980x620")
+        frame = ttk.Frame(win, padding=10)
+        frame.pack(fill="both", expand=True)
+        frame.columnconfigure(0, weight=1)
+        frame.rowconfigure(1, weight=1)
+
+        ttk.Label(frame, text=f"プレビュー: {image_path.name}", style="SA.PreviewVal.TLabel").grid(
+            row=0, column=0, sticky="w"
+        )
+        plot_host = ttk.Frame(frame)
+        plot_host.grid(row=1, column=0, sticky="nsew", pady=(8, 8))
+        plot_host.columnconfigure(0, weight=1)
+        plot_host.rowconfigure(0, weight=1)
+        try:
+            img = mpimg.imread(image_path)
+            fig = Figure(figsize=(9.2, 4.8), dpi=100)
+            ax = fig.add_subplot(111)
+            ax.imshow(img)
+            ax.axis("off")
+            canvas = FigureCanvasTkAgg(fig, master=plot_host)
+            canvas.draw()
+            canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
+        except Exception as exc:
+            ttk.Label(plot_host, text=f"画像表示に失敗しました: {exc}", style="SA.Error.TLabel").grid(
+                row=0, column=0, sticky="w"
+            )
+
+        btns = ttk.Frame(frame)
+        btns.grid(row=2, column=0, sticky="ew")
+        btns.columnconfigure(0, weight=1)
+        btns.columnconfigure(1, weight=1)
+        ttk.Button(btns, text="この設定で全断面を実行", style="SA.Run.TButton", command=lambda: (win.destroy(), self._run())).grid(
+            row=0, column=0, sticky="ew", padx=(0, 6), ipady=2
+        )
+        ttk.Button(btns, text="閉じる", command=win.destroy).grid(row=0, column=1, sticky="ew", padx=(6, 0), ipady=2)
 
     def _finish_error(self, exc: Exception) -> None:
         self._set_run_button_state(True)

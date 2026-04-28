@@ -21,6 +21,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="CSVを出力せず概要だけ確認")
     parser.add_argument("--limit-steps", type=int, default=None, help="先頭Nステップだけ処理")
     parser.add_argument("--shared-y-scale", action="store_true", help="グラフのY軸を全断面で共通化する")
+    parser.add_argument("--x-tick-interval-hour", type=float, default=None, help="グラフ横軸の目盛間隔[h]")
+    parser.add_argument(
+        "--title-template",
+        default="{section_id} {section_name} / 平均水位時系列",
+        help="グラフタイトルのテンプレート（{section_id}, {section_name} が使用可能）",
+    )
+    parser.add_argument("--graph-width-inch", type=float, default=12.0, help="グラフ幅[inch]")
+    parser.add_argument("--graph-height-inch", type=float, default=4.8, help="グラフ高さ[inch]")
+    parser.add_argument("--graph-dpi", type=int, default=180, help="グラフDPI")
     parser.add_argument(
         "--column-names",
         choices=["standard", "river"],
@@ -63,6 +72,11 @@ def main(argv: list[str] | None = None) -> int:
         dry_run=args.dry_run,
         column_names=args.column_names,
         shared_y_scale=args.shared_y_scale,
+        x_tick_interval_hour=args.x_tick_interval_hour,
+        title_template=args.title_template,
+        graph_width_inch=args.graph_width_inch,
+        graph_height_inch=args.graph_height_inch,
+        graph_dpi=args.graph_dpi,
     )
     try:
         result = run_section_analysis(

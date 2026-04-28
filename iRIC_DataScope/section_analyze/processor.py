@@ -124,6 +124,8 @@ def run_section_analysis(
     try:
         grid_nodes = data_source.load_grid_nodes()
         section_lines = read_section_lines(section_shp_path, options)
+        if options.section_limit and options.section_limit > 0:
+            section_lines = section_lines[: options.section_limit]
         section_nodes, actual_sample_interval = map_section_nodes(
             grid_nodes,
             section_lines,
@@ -147,6 +149,11 @@ def run_section_analysis(
                 timeseries,
                 overwrite=options.overwrite,
                 shared_y_scale=options.shared_y_scale,
+                x_tick_interval_hour=options.x_tick_interval_hour,
+                title_template=options.title_template,
+                graph_width_inch=options.graph_width_inch,
+                graph_height_inch=options.graph_height_inch,
+                graph_dpi=options.graph_dpi,
             )
             csv_files = write_outputs(
                 output_dir,

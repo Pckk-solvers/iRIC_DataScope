@@ -36,6 +36,14 @@ def _to_value(record: shapefile._Record, field: str | None) -> str | None:
     return text or None
 
 
+def list_shp_fields(shp_path: Path) -> list[str]:
+    path = Path(shp_path)
+    if not path.is_file():
+        raise FileNotFoundError(f"側線SHPが見つかりません: {path}")
+    reader = shapefile.Reader(str(path), encoding="utf-8")
+    return [field[0] for field in reader.fields[1:]]
+
+
 def read_section_lines(shp_path: Path, options: SectionAnalyzeOptions) -> list[SectionLine]:
     path = Path(shp_path)
     if not path.is_file():

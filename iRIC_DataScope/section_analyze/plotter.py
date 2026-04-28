@@ -6,7 +6,7 @@ from pathlib import Path
 
 import matplotlib
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FuncFormatter, MaxNLocator
+from matplotlib.ticker import FuncFormatter, MaxNLocator, MultipleLocator
 import pandas as pd
 
 from iRIC_DataScope.section_analyze.writer import GRAPH_DIR_NAME
@@ -46,7 +46,16 @@ def _numeric_bounds(values: pd.Series, *, fallback: tuple[float, float]) -> tupl
 
 
 def collect_graph_limits(timeseries: pd.DataFrame) -> tuple[float, float]:
-    return _numeric_bounds(timeseries.get("time", pd.Series(dtype=float)), fallback=(0.0, 1.0))
+    time_sec = pd.to_numeric(timeseries.get("time", pd.Series(dtype=float)), errors="coerce").dropna()
+    if time_sec.empty:
+        return (0.0, 1.0)
+    values = time_sec / 3600.0
+    x_min = float(values.min())
+    x_max = float(values.max())
+    if math.isclose(x_min, x_max):
+        x_max = x_min + 1.0
+    x_margin = max((x_max - x_min) * 0.03, 0.2)
+    return (x_min - x_margin, x_max + x_margin)
 
 
 def _render_section_graph(
@@ -57,42 +66,54 @@ def _render_section_graph(
     *,
     x_limits: tuple[float, float],
     y_limits: tuple[float, float],
+    x_tick_interval_hour: float | None,
+    title_template: str,
+    graph_width_inch: float,
+    graph_height_inch: float,
+    graph_dpi: int,
 ) -> None:
     frame = group.loc[:, ["time", "mean_wse"]].copy()
     frame["time"] = pd.to_numeric(frame["time"], errors="coerce")
+    frame["time_hour"] = frame["time"] / 3600.0
     frame["mean_wse"] = pd.to_numeric(frame["mean_wse"], errors="coerce")
-    frame = frame.dropna(subset=["time"]).sort_values("time")
+    frame = frame.dropna(subset=["time_hour"]).sort_values("time_hour")
 
-    fig, ax = plt.subplots(figsize=(12.0, 4.8), dpi=180)
+    fig, ax = plt.subplots(figsize=(graph_width_inch, graph_height_inch), dpi=graph_dpi)
     fig.patch.set_facecolor("white")
     ax.set_facecolor("white")
 
-    title = f"{section_id} {section_name} / 平均水位時系列".strip()
+    safe_title_template = title_template or "{section_id} {section_name} / 平均水位時系列"
+    try:
+        title = safe_title_template.format(section_id=section_id, section_name=section_name).strip()
+    except Exception:
+        title = f"{section_id} {section_name} / 平均水位時系列".strip()
     ax.set_title(title, fontsize=12, color=TEXT_COLOR, pad=12)
-    ax.set_xlabel("時刻", fontsize=11, color=TEXT_COLOR, labelpad=8)
-    ax.set_ylabel("平均水位", fontsize=11, color=TEXT_COLOR, labelpad=8)
+    ax.set_xlabel("時間[h]", fontsize=11, color=TEXT_COLOR, labelpad=8)
+    ax.set_ylabel("水位[T.P.m]", fontsize=11, color=TEXT_COLOR, labelpad=8)
 
-    ax.grid(True, which="major", axis="both", color=GRID_COLOR, linewidth=0.7)
+    ax.grid(True, which="major", axis="both", linestyle="--", color="#9AA7B6", linewidth=0.8)
     ax.tick_params(axis="both", labelsize=9, colors=TEXT_COLOR)
-    ax.xaxis.set_major_locator(MaxNLocator(nbins=7, integer=True))
-    ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _pos: f"{int(round(value))}"))
+    if x_tick_interval_hour and x_tick_interval_hour > 0:
+        ax.xaxis.set_major_locator(MultipleLocator(base=x_tick_interval_hour))
+    else:
+        ax.xaxis.set_major_locator(MaxNLocator(nbins=7))
+    ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _pos: f"{value:g}"))
 
-    for spine in ("top", "right"):
-        ax.spines[spine].set_visible(False)
-    for spine in ("left", "bottom"):
-        ax.spines[spine].set_color("#B0B8C2")
-        ax.spines[spine].set_linewidth(0.8)
+    for spine in ("top", "right", "left", "bottom"):
+        ax.spines[spine].set_visible(True)
+        ax.spines[spine].set_color("black")
+        ax.spines[spine].set_linewidth(0.9)
 
     if not frame.empty and frame["mean_wse"].notna().any():
         valid = frame.dropna(subset=["mean_wse"])
-        ax.plot(frame["time"], frame["mean_wse"], color=LINE_COLOR, linewidth=1.8)
-        peak = valid.sort_values(["mean_wse", "time"], ascending=[False, True]).iloc[0]
-        peak_time = float(peak["time"])
+        ax.plot(frame["time_hour"], frame["mean_wse"], color=LINE_COLOR, linewidth=1.8)
+        peak = valid.sort_values(["mean_wse", "time_hour"], ascending=[False, True]).iloc[0]
+        peak_time = float(peak["time_hour"])
         peak_value = float(peak["mean_wse"])
-        peak_time_label = int(round(peak_time))
+        peak_time_label = f"{peak_time:g}"
         ax.scatter([peak_time], [peak_value], s=36, color=LINE_COLOR, edgecolors="white", linewidths=0.8, zorder=3)
         ax.annotate(
-            f"最大 {peak_value:.2f} (t={peak_time_label})",
+            f"Max {peak_value:.2f} (t={peak_time_label}h)",
             xy=(peak_time, peak_value),
             xytext=(10, 10),
             textcoords="offset points",
@@ -126,6 +147,11 @@ def write_section_graphs(
     *,
     overwrite: bool,
     shared_y_scale: bool = False,
+    x_tick_interval_hour: float | None = None,
+    title_template: str = "{section_id} {section_name} / 平均水位時系列",
+    graph_width_inch: float = 12.0,
+    graph_height_inch: float = 4.8,
+    graph_dpi: int = 180,
 ) -> tuple[Path, ...]:
     graph_dir = Path(output_dir) / GRAPH_DIR_NAME
     graph_dir.mkdir(parents=True, exist_ok=True)
@@ -149,6 +175,18 @@ def write_section_graphs(
         section_name = str(first.get("section_name", section_id))
         y_limits = shared_y_limits or _numeric_bounds(group.get("mean_wse", pd.Series(dtype=float)), fallback=(0.0, 1.0))
         path = graph_dir / f"{_safe_filename(section_id)}.png"
-        _render_section_graph(path, str(section_id), section_name, group, x_limits=x_limits, y_limits=y_limits)
+        _render_section_graph(
+            path,
+            str(section_id),
+            section_name,
+            group,
+            x_limits=x_limits,
+            y_limits=y_limits,
+            x_tick_interval_hour=x_tick_interval_hour,
+            title_template=title_template,
+            graph_width_inch=graph_width_inch,
+            graph_height_inch=graph_height_inch,
+            graph_dpi=graph_dpi,
+        )
         output_files.append(path)
     return tuple(output_files)

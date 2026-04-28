@@ -22,7 +22,20 @@ def test_write_section_graphs_default_uses_per_section_y_limits(monkeypatch, tmp
     timeseries = _sample_timeseries()
     captured: list[tuple[float, float]] = []
 
-    def fake_render(path: Path, section_id: str, section_name: str, group: pd.DataFrame, *, x_limits, y_limits) -> None:
+    def fake_render(
+        path: Path,
+        section_id: str,
+        section_name: str,
+        group: pd.DataFrame,
+        *,
+        x_limits,
+        y_limits,
+        x_tick_interval_hour,
+        title_template,
+        graph_width_inch,
+        graph_height_inch,
+        graph_dpi,
+    ) -> None:
         captured.append(y_limits)
         path.write_bytes(b"png")
 
@@ -40,7 +53,20 @@ def test_write_section_graphs_shared_y_limits(monkeypatch, tmp_path: Path) -> No
 
     captured: list[tuple[float, float]] = []
 
-    def fake_render(path: Path, section_id: str, section_name: str, group: pd.DataFrame, *, x_limits, y_limits) -> None:
+    def fake_render(
+        path: Path,
+        section_id: str,
+        section_name: str,
+        group: pd.DataFrame,
+        *,
+        x_limits,
+        y_limits,
+        x_tick_interval_hour,
+        title_template,
+        graph_width_inch,
+        graph_height_inch,
+        graph_dpi,
+    ) -> None:
         captured.append(y_limits)
         path.write_bytes(b"png")
 
