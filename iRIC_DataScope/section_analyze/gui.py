@@ -625,7 +625,7 @@ class SectionAnalyzeGUI(tk.Toplevel):
             img = mpimg.imread(image_path)
             fig = Figure(figsize=(9.2, 4.8), dpi=100)
             ax = fig.add_subplot(111)
-            ax.imshow(img)
+            ax.imshow(img, interpolation="nearest", aspect="auto", resample=False)
             ax.axis("off")
             canvas = FigureCanvasTkAgg(fig, master=plot_host)
             canvas.draw()

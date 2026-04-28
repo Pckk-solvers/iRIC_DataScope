@@ -191,6 +191,21 @@ uv run python -m iRIC_DataScope.section_analyze `
 
 --shared-y-scale
   グラフY軸を全断面で共通スケールにする。未指定時は断面ごとの最適スケール
+
+--x-tick-interval-hour
+  グラフ横軸の目盛間隔[h]。未指定時は自動目盛
+
+--title-template
+  グラフタイトルのテンプレート。{section_id}, {section_name} が使用可能
+
+--graph-width-inch
+  グラフ幅[inch]
+
+--graph-height-inch
+  グラフ高さ[inch]
+
+--graph-dpi
+  グラフDPI
 ```
 
 ### 4.3 CLIの終了コード
@@ -314,6 +329,12 @@ limit_steps: int | None
 dry_run: bool
 column_names: Literal["standard", "river"]
 shared_y_scale: bool
+x_tick_interval_hour: float | None
+title_template: str
+graph_width_inch: float
+graph_height_inch: float
+graph_dpi: int
+section_limit: int | None
 ```
 
 ### 5.6 cgn_loader.py
@@ -689,3 +710,16 @@ iric-datascope-section = "iRIC_DataScope.section_analyze.cli:main"
 
 * 既定挙動は現行と同じく自動目盛を維持する
 * 時刻の元データ（秒）は保持し、表示変換のみグラフ描画で行う
+
+## 11. 1断面プレビュー（GUI）
+
+`section_analyze/gui.py` に実行補助として次を持たせる。
+
+* `1断面プレビュー` ボタン
+  * 現在設定を使って `section_limit=1` で処理実行
+  * 出力先は `output/section_analyze/_preview`
+* プレビュー表示
+  * `matplotlib` の `FigureCanvasTkAgg` でプレビューウィンドウに表示
+* プレビュー後の遷移
+  * プレビューウィンドウに `この設定で全断面を実行` ボタンを配置
+  * そのまま本実行 (`section_limit=None`) へ移れるようにする

@@ -45,6 +45,43 @@ def _numeric_bounds(values: pd.Series, *, fallback: tuple[float, float]) -> tupl
     return lower - margin, upper + margin
 
 
+def _tick_step(value_range: float) -> float:
+    if value_range <= 0.0:
+        return 1.0
+    rough = value_range / 5.0
+    power = math.floor(math.log10(rough))
+    base = 10 ** power
+    normalized = rough / base
+    if normalized <= 1:
+        nice = 1
+    elif normalized <= 2:
+        nice = 2
+    elif normalized <= 5:
+        nice = 5
+    else:
+        nice = 10
+    return nice * base
+
+
+def _y_axis_spec(values: pd.Series) -> tuple[float, float, float]:
+    numeric = pd.to_numeric(values, errors="coerce").dropna()
+    if numeric.empty:
+        return (0.0, 1.0, 0.2)
+    lower = float(numeric.min())
+    upper = float(numeric.max())
+    if math.isclose(lower, upper):
+        step = _tick_step(max(abs(lower) * 0.1, 1.0))
+        return (lower - step, lower + step, step)
+
+    step = _tick_step(upper - lower)
+    # 1目盛ぶん上下に余白を確保し、目盛で閉じる
+    bottom = math.floor(lower / step) * step - step
+    top = math.ceil(upper / step) * step + step
+    if math.isclose(bottom, top):
+        top = bottom + step * 2
+    return (bottom, top, step)
+
+
 def collect_graph_limits(timeseries: pd.DataFrame) -> tuple[float, float]:
     time_sec = pd.to_numeric(timeseries.get("time", pd.Series(dtype=float)), errors="coerce").dropna()
     if time_sec.empty:
@@ -66,6 +103,7 @@ def _render_section_graph(
     *,
     x_limits: tuple[float, float],
     y_limits: tuple[float, float],
+    y_tick_step: float,
     x_tick_interval_hour: float | None,
     title_template: str,
     graph_width_inch: float,
@@ -97,6 +135,8 @@ def _render_section_graph(
         ax.xaxis.set_major_locator(MultipleLocator(base=x_tick_interval_hour))
     else:
         ax.xaxis.set_major_locator(MaxNLocator(nbins=7))
+    if y_tick_step > 0:
+        ax.yaxis.set_major_locator(MultipleLocator(base=y_tick_step))
     ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _pos: f"{value:g}"))
 
     for spine in ("top", "right", "left", "bottom"):
@@ -166,14 +206,15 @@ def write_section_graphs(
         return ()
 
     x_limits = collect_graph_limits(timeseries)
-    shared_y_limits: tuple[float, float] | None = None
+    shared_y_spec: tuple[float, float, float] | None = None
     if shared_y_scale:
-        shared_y_limits = _numeric_bounds(timeseries.get("mean_wse", pd.Series(dtype=float)), fallback=(0.0, 1.0))
+        shared_y_spec = _y_axis_spec(timeseries.get("mean_wse", pd.Series(dtype=float)))
     output_files: list[Path] = []
     for section_id, group in timeseries.groupby("section_id", sort=False):
         first = group.iloc[0]
         section_name = str(first.get("section_name", section_id))
-        y_limits = shared_y_limits or _numeric_bounds(group.get("mean_wse", pd.Series(dtype=float)), fallback=(0.0, 1.0))
+        y_spec = shared_y_spec or _y_axis_spec(group.get("mean_wse", pd.Series(dtype=float)))
+        y_limits = (y_spec[0], y_spec[1])
         path = graph_dir / f"{_safe_filename(section_id)}.png"
         _render_section_graph(
             path,
@@ -182,6 +223,7 @@ def write_section_graphs(
             group,
             x_limits=x_limits,
             y_limits=y_limits,
+            y_tick_step=y_spec[2],
             x_tick_interval_hour=x_tick_interval_hour,
             title_template=title_template,
             graph_width_inch=graph_width_inch,
