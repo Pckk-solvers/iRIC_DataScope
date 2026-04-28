@@ -8,6 +8,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib.ticker import FuncFormatter, MaxNLocator, MultipleLocator
 import pandas as pd
+from matplotlib.figure import Figure
 
 from iRIC_DataScope.section_analyze.writer import GRAPH_DIR_NAME
 
@@ -82,7 +83,11 @@ def _y_axis_spec(values: pd.Series) -> tuple[float, float, float]:
     return (bottom, top, step)
 
 
-def collect_graph_limits(timeseries: pd.DataFrame) -> tuple[float, float]:
+def collect_graph_limits(
+    timeseries: pd.DataFrame,
+    *,
+    x_tick_interval_hour: float | None = None,
+) -> tuple[float, float]:
     time_sec = pd.to_numeric(timeseries.get("time", pd.Series(dtype=float)), errors="coerce").dropna()
     if time_sec.empty:
         return (0.0, 1.0)
@@ -90,9 +95,15 @@ def collect_graph_limits(timeseries: pd.DataFrame) -> tuple[float, float]:
     x_min = float(values.min())
     x_max = float(values.max())
     if math.isclose(x_min, x_max):
-        x_max = x_min + 1.0
-    x_margin = max((x_max - x_min) * 0.03, 0.2)
-    return (x_min - x_margin, x_max + x_margin)
+        step = x_tick_interval_hour if x_tick_interval_hour and x_tick_interval_hour > 0 else 1.0
+        return (x_min - step, x_min)
+    step = x_tick_interval_hour if x_tick_interval_hour and x_tick_interval_hour > 0 else _tick_step(x_max - x_min)
+    # 開始側は1目盛ぶん余白、終了側は最終目盛で閉じる
+    left = math.floor(x_min / step) * step - step
+    right = math.ceil(x_max / step) * step
+    if math.isclose(left, right):
+        right = left + step
+    return (left, right)
 
 
 def _render_section_graph(
@@ -110,6 +121,37 @@ def _render_section_graph(
     graph_height_inch: float,
     graph_dpi: int,
 ) -> None:
+    fig = build_section_figure(
+        section_id=section_id,
+        section_name=section_name,
+        group=group,
+        x_limits=x_limits,
+        y_limits=y_limits,
+        y_tick_step=y_tick_step,
+        x_tick_interval_hour=x_tick_interval_hour,
+        title_template=title_template,
+        graph_width_inch=graph_width_inch,
+        graph_height_inch=graph_height_inch,
+        graph_dpi=graph_dpi,
+    )
+    fig.savefig(path, facecolor=fig.get_facecolor(), bbox_inches="tight")
+    plt.close(fig)
+
+
+def build_section_figure(
+    *,
+    section_id: str,
+    section_name: str,
+    group: pd.DataFrame,
+    x_limits: tuple[float, float],
+    y_limits: tuple[float, float],
+    y_tick_step: float,
+    x_tick_interval_hour: float | None,
+    title_template: str,
+    graph_width_inch: float,
+    graph_height_inch: float,
+    graph_dpi: int,
+) -> Figure:
     frame = group.loc[:, ["time", "mean_wse"]].copy()
     frame["time"] = pd.to_numeric(frame["time"], errors="coerce")
     frame["time_hour"] = frame["time"] / 3600.0
@@ -177,8 +219,7 @@ def _render_section_graph(
     ax.set_xlim(*x_limits)
     ax.set_ylim(*y_limits)
     fig.tight_layout()
-    fig.savefig(path, facecolor=fig.get_facecolor(), bbox_inches="tight")
-    plt.close(fig)
+    return fig
 
 
 def write_section_graphs(
@@ -205,7 +246,7 @@ def write_section_graphs(
     if timeseries.empty:
         return ()
 
-    x_limits = collect_graph_limits(timeseries)
+    x_limits = collect_graph_limits(timeseries, x_tick_interval_hour=x_tick_interval_hour)
     shared_y_spec: tuple[float, float, float] | None = None
     if shared_y_scale:
         shared_y_spec = _y_axis_spec(timeseries.get("mean_wse", pd.Series(dtype=float)))

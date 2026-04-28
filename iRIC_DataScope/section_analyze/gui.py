@@ -6,10 +6,10 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-from matplotlib.figure import Figure
-import matplotlib.image as mpimg
+import pandas as pd
 
 from iRIC_DataScope.section_analyze.models import SectionAnalyzeOptions
+from iRIC_DataScope.section_analyze.plotter import _y_axis_spec, build_section_figure, collect_graph_limits
 from iRIC_DataScope.section_analyze.processor import run_section_analysis
 from iRIC_DataScope.section_analyze.shp_reader import list_shp_fields
 
@@ -344,7 +344,8 @@ class SectionAnalyzeGUI(tk.Toplevel):
         ttk.Label(
             section,
             text="断面ごとに1枚ずつ、平均水位の時系列 PNG を出力します。\n"
-                 "最大点は注記で強調し、時刻は整数表示にしています。",
+                 "最大点は注記で強調し、時刻は整数表示にしています。\n"
+                 "※ プレビューはDPI設定を反映しません（解像度は出力PNGで確認）。",
             style="SA.Muted.TLabel",
             wraplength=300,
             justify="left",
@@ -597,14 +598,14 @@ class SectionAnalyzeGUI(tk.Toplevel):
                 error = exc
                 self.after(0, lambda: self._finish_error(error))
                 return
-            self.after(0, lambda: self._finish_preview_success(pngs[0]))
+            self.after(0, lambda: self._finish_preview_success(result.output_dir))
 
         threading.Thread(target=worker, daemon=True).start()
 
-    def _finish_preview_success(self, image_path: Path) -> None:
+    def _finish_preview_success(self, preview_output_dir: Path) -> None:
         self._set_run_button_state(True)
         self._status_var.set("プレビュー生成完了")
-        self._status_detail_var.set(str(image_path))
+        self._status_detail_var.set(str(preview_output_dir))
 
         win = tk.Toplevel(self)
         win.title("1断面グラフプレビュー")
@@ -614,22 +615,53 @@ class SectionAnalyzeGUI(tk.Toplevel):
         frame.columnconfigure(0, weight=1)
         frame.rowconfigure(1, weight=1)
 
-        ttk.Label(frame, text=f"プレビュー: {image_path.name}", style="SA.PreviewVal.TLabel").grid(
+        ttk.Label(frame, text="プレビュー: 1断面グラフ", style="SA.PreviewVal.TLabel").grid(
             row=0, column=0, sticky="w"
         )
+        ttk.Label(
+            frame,
+            text="※ プレビューではDPI設定を反映しません。解像度は出力PNGで確認してください。",
+            style="SA.Muted.TLabel",
+        ).grid(row=0, column=1, sticky="e")
         plot_host = ttk.Frame(frame)
-        plot_host.grid(row=1, column=0, sticky="nsew", pady=(8, 8))
-        plot_host.columnconfigure(0, weight=1)
-        plot_host.rowconfigure(0, weight=1)
+        plot_host.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(8, 8))
+        plot_host.grid_propagate(False)
         try:
-            img = mpimg.imread(image_path)
-            fig = Figure(figsize=(9.2, 4.8), dpi=100)
-            ax = fig.add_subplot(111)
-            ax.imshow(img, interpolation="nearest", aspect="auto", resample=False)
-            ax.axis("off")
+            ts_path = preview_output_dir / "section_timeseries.csv"
+            df = pd.read_csv(ts_path, encoding="utf-8-sig")
+            if df.empty:
+                raise RuntimeError("プレビュー対象の時系列データが空です。")
+            first_id = str(df.iloc[0]["section_id"])
+            group = df[df["section_id"] == first_id].copy()
+            section_name = str(group.iloc[0].get("section_name", first_id))
+            x_tick_text = self.x_tick_interval_hour_var.get().strip()
+            x_tick_interval_hour = float(x_tick_text) if x_tick_text else None
+            x_limits = collect_graph_limits(group, x_tick_interval_hour=x_tick_interval_hour)
+            y_spec = _y_axis_spec(group.get("mean_wse", pd.Series(dtype=float)))
+            fig = build_section_figure(
+                section_id=first_id,
+                section_name=section_name,
+                group=group,
+                x_limits=x_limits,
+                y_limits=(y_spec[0], y_spec[1]),
+                y_tick_step=y_spec[2],
+                x_tick_interval_hour=x_tick_interval_hour,
+                title_template=self.title_template_var.get().strip() or "{section_id} {section_name} / 平均水位時系列",
+                graph_width_inch=float(self.graph_width_inch_var.get().strip() or "12.0"),
+                graph_height_inch=float(self.graph_height_inch_var.get().strip() or "4.8"),
+                graph_dpi=100,
+            )
+            preview_w = int(round(fig.get_figwidth() * fig.dpi))
+            preview_h = int(round(fig.get_figheight() * fig.dpi))
+            plot_host.configure(width=preview_w, height=preview_h)
+            min_w = preview_w + 80
+            min_h = preview_h + 150
+            win.minsize(min_w, min_h)
             canvas = FigureCanvasTkAgg(fig, master=plot_host)
             canvas.draw()
-            canvas.get_tk_widget().grid(row=0, column=0, sticky="nsew")
+            canvas_widget = canvas.get_tk_widget()
+            canvas_widget.configure(width=preview_w, height=preview_h)
+            canvas_widget.pack(anchor="center")
         except Exception as exc:
             ttk.Label(plot_host, text=f"画像表示に失敗しました: {exc}", style="SA.Error.TLabel").grid(
                 row=0, column=0, sticky="w"
