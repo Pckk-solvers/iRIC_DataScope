@@ -81,8 +81,8 @@ output_dir: 既存の出力フォルダ
 側線SHP
 depth_threshold
 sample_interval
-断面IDフィールド
-断面名フィールド
+断面ID属性（任意）
+断面名属性（必須）
 ```
 
 初期値:
@@ -90,8 +90,8 @@ sample_interval
 ```text
 depth_threshold = 0.01
 sample_interval = 自動
-断面IDフィールド = 自動
-断面名フィールド = 自動
+断面ID属性 = 自動採番（未指定時）
+断面名属性 = ユーザー選択必須
 ```
 
 ボタン:
@@ -172,10 +172,10 @@ uv run python -m iRIC_DataScope.section_analyze `
   側線サンプリング間隔。未指定なら自動推定
 
 --section-id-field
-  断面IDとして使う属性フィールド。未指定なら自動検出
+  断面IDとして使う属性フィールド。未指定なら SEC001... を自動採番
 
 --section-name-field
-  断面名として使う属性フィールド。未指定なら自動検出
+  断面名として使う属性フィールド。必須
 
 --overwrite
   既存CSVがある場合に上書きする
@@ -330,6 +330,7 @@ dry_run: bool
 column_names: Literal["standard", "river"]
 shared_y_scale: bool
 x_tick_interval_hour: float | None
+y_tick_interval: float | None
 title_template: str
 graph_width_inch: float
 graph_height_inch: float
@@ -370,18 +371,14 @@ pyshp >= 2.3
 
 初期実装では `LineString` のみ受け付ける。`MultiLineString` はエラーにする。
 
-属性フィールドは以下の順で自動検出する。
+属性フィールドは自動検出しない。
 
 ```text
-section_id: section_id, ID, id, SecNo, sec_no
-section_name: section_name, Name, name, 断面名
-```
+section_id:
+  任意。未指定なら SEC001, SEC002, ... を採番
 
-見つからない場合:
-
-```text
-section_id = SEC001, SEC002, ...
-section_name = section_id
+section_name:
+  必須。指定がない場合はエラー
 ```
 
 ### 5.8 sampler.py
@@ -686,18 +683,22 @@ iric-datascope-section = "iRIC_DataScope.section_analyze.cli:main"
 * `x_tick_interval_hour: float | None`
   * `None`: 自動目盛
   * 指定値あり: 指定時間刻みで主目盛
+* `y_tick_interval: float | None`
+  * `None`: 自動目盛
+  * 指定値あり: 指定縦軸刻みで主目盛
 
 ### 10.3 GUI拡張方針
 
 `section_analyze/gui.py` の設定欄に次を追加する。
 
 * `横軸目盛間隔[h]` 入力欄（空欄で自動）
+* `縦軸目盛間隔` 入力欄（空欄で自動）
 * `断面IDフィールド` / `断面名フィールド` は
   SHP読み込み後の属性候補を選択できるUIへ拡張
-* タイトル調整欄（次段実装）
-  * 表示ON/OFF
+* タイトル調整欄
   * テンプレート文字列
-  * ID/名称の表示モード
+  * `{section_id}` / `{section_name}` が使える
+  * 値は集計設定の属性選択結果に連動する
 
 ### 10.4 CLI拡張方針
 
@@ -705,6 +706,8 @@ iric-datascope-section = "iRIC_DataScope.section_analyze.cli:main"
 
 * `--x-tick-interval-hour`
   * 例: `--x-tick-interval-hour 0.5`
+* `--y-tick-interval`
+  * 例: `--y-tick-interval 0.2`
 
 ### 10.5 後方互換
 
@@ -716,10 +719,11 @@ iric-datascope-section = "iRIC_DataScope.section_analyze.cli:main"
 `section_analyze/gui.py` に実行補助として次を持たせる。
 
 * `1断面プレビュー` ボタン
-  * 現在設定を使って `section_limit=1` で処理実行
-  * 出力先は `output/section_analyze/_preview`
+  * 現在設定を使ってプレビュー時系列をメモリ上で作成
+  * CSV/PNGは出力しない
 * プレビュー表示
   * `matplotlib` の `FigureCanvasTkAgg` でプレビューウィンドウに表示
+  * DPIは固定表示で、見た目確認専用
 * プレビュー後の遷移
   * プレビューウィンドウに `この設定で全断面を実行` ボタンを配置
   * そのまま本実行 (`section_limit=None`) へ移れるようにする
